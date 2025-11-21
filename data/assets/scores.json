@@ -1,0 +1,22 @@
+{
+    "Jugadores": [
+        {"nombre": "Mainor"},
+        {"nombre": "Claudia"},
+        {"nombre": "Greivin"}
+    ],
+
+    "puntajes": {
+        "escapa": [
+            {"nombre": "Mainor", "puntaje": 1500, "fecha": "2024-06-01"},
+            {"nombre": "Claudia", "puntaje": 1200, "fecha": "2024-06-02"},
+            {"nombre": "Greivin", "puntaje": 1000, "fecha": "2024-06-03"}
+        ],
+        "cazador": [
+            {"nombre": "Greivin", "puntaje": 2000, "fecha": "2024-06-01"},
+            {"nombre": "Mainor", "puntaje": 1800, "fecha": "2024-06-02"},
+            {"nombre": "Claudia", "puntaje": 1600, "fecha": "2024-06-03"}
+        ]
+    }
+
+    
+}

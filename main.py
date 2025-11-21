@@ -70,6 +70,8 @@ class MainMenu:
         #botones
         self.menu.add.button("Modo Escapa", self.app.game_loop.start_escape_mode)
         self.menu.add.button("Modo Cazado", self.app.game_loop.start_hunter_mode)
+        self.menu.add.button("Configuración", self.app.game_loop.settings_mode)
+        self.menu.add.button("Puntuaciones", self.app.game_loop.top_scores_mode)
         self.menu.add.button("Salir",pygame_menu.events.EXIT)
     def show(self):
         self.menu.mainloop(self.app.screen)
@@ -93,6 +95,16 @@ class GameLoop:
         print("Iniciando Modo Cazado...")
         print("Jugador:", self.app.player_name)
         self.run_game_loop(mode="Cazador")
+    
+    def settings_mode(self):
+        print("Iniciando Modo Configuración...")
+        print("Jugador:", self.app.player_name)
+        self.run_game_loop(mode="Configuración")
+    
+    def top_scores_mode(self):
+        print("Iniciando Modo Puntuaciones...")
+        print("Jugador:", self.app.player_name)
+        self.run_game_loop(mode="Puntuaciones")
 
     def run_game_loop(self, mode):
         #Aquí estará el juego Real. Por ahora un loop básico

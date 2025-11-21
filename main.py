@@ -10,6 +10,9 @@ class LaberintoGame:
         pygame.display.set_caption("Escape del Laberinto")
 
         self.player_name = ""
+
+        #Primero registro de jugador
+        self.register_menu = RegisterMenu(self)
         # Primero crear el game loop y luego el menú, porque el menú
         # usa `app.game_loop` en sus callbacks.
         self.game_loop = GameLoop(self)
@@ -17,13 +20,38 @@ class LaberintoGame:
 
     def run(self):
         "Inicia el menú principal"
-        self.menu.show()
+        self.register_menu.show()
 
     def set_player_name(self, name):
         self.player_name = name
         print(f"Nombre del jugador establecido a: {self.player_name}")
 
 
+class RegisterMenu:
+    def __init__(self, app):
+        self.app = app
+        self.menu = pygame_menu.Menu(
+            "Registro de Jugador",
+            app.WIDTH,
+            app.HEIGHT,
+            theme=pygame_menu.themes.THEME_DARK,
+        )
+
+        #campo de texto para ingresar nombre
+        self.menu.add.text_input("Nombre: ", onchange=self.app.set_player_name)
+
+        #Boton continuar
+        self.menu.add.button("Continuar", self.validar_registro)
+
+    def validar_registro(self):
+        if self.app.player_name.strip() == "":
+            print("Por favor, ingrese un nombre.")
+        else:
+            self.menu.disable()
+            self.app.menu.show()
+
+    def show(self):
+        self.menu.mainloop(self.app.screen)
 
 # Clase para el menú principal
 class MainMenu:
@@ -33,7 +61,7 @@ class MainMenu:
             "Escapa del Laberinto",
             app.WIDTH,
             app.HEIGHT,
-            theme=pygame_menu.themes.THEME_BLUE
+            theme=pygame_menu.themes.THEME_BLUE,
         )
 
         #campo de texto

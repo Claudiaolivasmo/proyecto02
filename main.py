@@ -7,7 +7,7 @@ Claudia Olivas
 
 ===================================
 '''
-
+import random
 import json
 import os
 
@@ -31,6 +31,12 @@ MODO_CAZADOR = 2
 DIFICULTAD_FACIL   = "facil"
 DIFICULTAD_MEDIA   = "media"
 DIFICULTAD_DIFICIL = "dificil"
+
+# Mapa
+
+ANCHO_MAPA = 15  # columnas
+ALTO_MAPA  = 10  # filas
+
 
 
 class ConfigDificultad:
@@ -71,6 +77,175 @@ CONFIGS_DIFICULTAD = {
     ),
 }
 
+# ==========================================
+# ========== CLASES DE CASILLAS ============
+# ==========================================
+
+class Casilla:
+    """
+    Clase base para cualquier tipo de casilla del mapa.
+    """
+
+    def __init__(self, tipo, simbolo):
+        self.tipo = tipo        # CAMINO, LIANA, TUNEL, MURO
+        self.simbolo = simbolo  # Cómo se verá en la consola
+
+    def puede_pisar_jugador(self):
+        """Por defecto, nadie puede pasar. Se redefine en las hijas."""
+        return False
+
+    def puede_pisar_enemigo(self):
+        """Por defecto, nadie puede pasar. Se redefine en las hijas."""
+        return False
+
+
+class Camino(Casilla):
+    def __init__(self):
+        super().__init__(CAMINO, ".")  # punto = camino libre
+
+    def puede_pisar_jugador(self):
+        return True
+
+    def puede_pisar_enemigo(self):
+        return True
+
+
+class Liana(Casilla):
+    """
+    Liana: solo los cazadores pueden pasar.
+    Jugador NO puede pasar.
+    """
+    def __init__(self):
+        super().__init__(LIANA, "~")  # ~ para representar lianas
+
+    def puede_pisar_jugador(self):
+        return False
+
+    def puede_pisar_enemigo(self):
+        return True
+
+
+class Tunel(Casilla):
+    """
+    Túnel: solo el jugador puede pasar.
+    Enemigos NO pueden pasar.
+    """
+    def __init__(self):
+        super().__init__(TUNEL, "T")
+
+    def puede_pisar_jugador(self):
+        return True
+
+    def puede_pisar_enemigo(self):
+        return False
+
+
+class Muro(Casilla):
+    """
+    Muro: nadie puede pasar.
+    """
+    def __init__(self):
+        super().__init__(MURO, "#")  # # para representar muro
+
+    def puede_pisar_jugador(self):
+        return False
+
+    def puede_pisar_enemigo(self):
+        return False
+
+
+def crear_casilla_aleatoria():
+    """
+    Crea una casilla aleatoria de cualquiera de los 4 tipos.
+    Esta función se usa para rellenar el mapa, SIN tocar el camino ya creado.
+    """
+    tipo_random = random.randint(0, 3)
+
+    if tipo_random == CAMINO:
+        return Camino()
+    elif tipo_random == LIANA:
+        return Liana()
+    elif tipo_random == TUNEL:
+        return Tunel()
+    else:
+        return Muro()
+
+def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
+    """
+    Genera un mapa con al menos un camino válido desde la columna 0 hasta la última.
+    Devuelve:
+    - mapa: matriz de casillas
+    - inicio: posición del jugador
+    - salida: posición final
+    """
+
+    # ========================================
+    # 1. Crear matriz llena de MUROS
+    # ========================================
+    mapa = []
+
+    for f in range(alto):
+        fila_nueva = []
+        for c in range(ancho):
+            fila_nueva.append(Muro())  # todo empieza como muro
+        mapa.append(fila_nueva)
+
+    # ========================================
+    # 2. Elegir la fila donde inicia el jugador
+    # ========================================
+    fila_jugador = random.randint(0, alto - 1)
+    columna_jugador = 0
+
+    inicio = (fila_jugador, columna_jugador)
+
+    mapa[fila_jugador][columna_jugador] = Camino()  # primer camino
+
+    # ========================================
+    # 3. Crear el camino garantizado hasta la última columna
+    # ========================================
+    fila_actual = fila_jugador
+    columna_actual = columna_jugador
+
+    while columna_actual < ancho - 1:
+
+        # opciones posibles de movimiento
+        opciones = ["derecha"]
+
+        if fila_actual > 0:
+            opciones.append("arriba")
+        if fila_actual < alto - 1:
+            opciones.append("abajo")
+
+        movimiento = random.choice(opciones)
+
+        if movimiento == "derecha":
+            columna_actual += 1
+        elif movimiento == "arriba":
+            fila_actual -= 1
+        elif movimiento == "abajo":
+            fila_actual += 1
+
+        # marcar el camino
+        mapa[fila_actual][columna_actual] = Camino()
+
+    salida = (fila_actual, columna_actual)
+
+    # ========================================
+    # 4. Rellenar todo lo que NO es camino con casillas aleatorias
+    # ========================================
+    for f in range(alto):
+        for c in range(ancho):
+
+            # no sobrescribir el camino real
+            if isinstance(mapa[f][c], Camino):
+                continue
+
+            mapa[f][c] = crear_casilla_aleatoria()
+
+    # ========================================
+    # 5. Devolver los resultados
+    # ========================================
+    return mapa, inicio, salida
 
 # ======= REGISTRO DE JUGADORES ============
 

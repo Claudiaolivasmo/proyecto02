@@ -2,7 +2,7 @@ import pygame
 import pygame_menu
 
 pygame.init()
-
+#TODO Mejor visualmente el menu de registro y principal
 class LaberintoGame:
     def __init__(self):
         self.WIDTH, self.HEIGHT = 800, 600

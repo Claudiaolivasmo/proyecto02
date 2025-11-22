@@ -77,25 +77,20 @@ CONFIGS_DIFICULTAD = {
     ),
 }
 
-# ==========================================
 # ========== CLASES DE CASILLAS ============
-# ==========================================
 
-class Casilla:
-    """
-    Clase base para cualquier tipo de casilla del mapa.
-    """
+class Casilla: # Clase base para cualquier tipo de casilla del mapa.
 
     def __init__(self, tipo, simbolo):
         self.tipo = tipo        # CAMINO, LIANA, TUNEL, MURO
-        self.simbolo = simbolo  # Cómo se verá en la consola
+        self.simbolo = simbolo  # Cómo se verá en la consola (de momento, sin pygame)
 
-    def puede_pisar_jugador(self):
-        """Por defecto, nadie puede pasar. Se redefine en las hijas."""
+    def puede_pisar_jugador(self): # Por defecto, nadie puede pasar. Se redefine en las clases hijas. (Camino, Liana,etc)
+
         return False
 
-    def puede_pisar_enemigo(self):
-        """Por defecto, nadie puede pasar. Se redefine en las hijas."""
+    def puede_pisar_enemigo(self): # Por defecto, nadie puede pasar. Se redefine en las clases hijas. (Camino, Liana,etc)
+
         return False
 
 
@@ -110,11 +105,8 @@ class Camino(Casilla):
         return True
 
 
-class Liana(Casilla):
-    """
-    Liana: solo los cazadores pueden pasar.
-    Jugador NO puede pasar.
-    """
+class Liana(Casilla): # Liana: solo los cazadores pueden pasar. Jugador NO puede pasar.
+
     def __init__(self):
         super().__init__(LIANA, "~")  # ~ para representar lianas
 
@@ -125,11 +117,8 @@ class Liana(Casilla):
         return True
 
 
-class Tunel(Casilla):
-    """
-    Túnel: solo el jugador puede pasar.
-    Enemigos NO pueden pasar.
-    """
+class Tunel(Casilla): # Túnel: solo el jugador puede pasar. Enemigos NO pueden pasar.
+
     def __init__(self):
         super().__init__(TUNEL, "T")
 
@@ -140,10 +129,8 @@ class Tunel(Casilla):
         return False
 
 
-class Muro(Casilla):
-    """
-    Muro: nadie puede pasar.
-    """
+class Muro(Casilla): # Muro: nadie puede pasar.
+
     def __init__(self):
         super().__init__(MURO, "#")  # # para representar muro
 
@@ -154,11 +141,8 @@ class Muro(Casilla):
         return False
 
 
-def crear_casilla_aleatoria():
-    """
-    Crea una casilla aleatoria de cualquiera de los 4 tipos.
-    Esta función se usa para rellenar el mapa, SIN tocar el camino ya creado.
-    """
+def crear_casilla_aleatoria(): # Crea una casilla aleatoria de cualquiera de los 4 tipos.
+
     tipo_random = random.randint(0, 3)
 
     if tipo_random == CAMINO:
@@ -179,9 +163,9 @@ def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
     - salida: posición final
     """
 
-    # ========================================
+
     # 1. Crear matriz llena de MUROS
-    # ========================================
+
     mapa = []
 
     for f in range(alto):
@@ -190,9 +174,9 @@ def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
             fila_nueva.append(Muro())  # todo empieza como muro
         mapa.append(fila_nueva)
 
-    # ========================================
+
     # 2. Elegir la fila donde inicia el jugador
-    # ========================================
+
     fila_jugador = random.randint(0, alto - 1)
     columna_jugador = 0
 
@@ -200,15 +184,15 @@ def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
 
     mapa[fila_jugador][columna_jugador] = Camino()  # primer camino
 
-    # ========================================
+
     # 3. Crear el camino garantizado hasta la última columna
-    # ========================================
+
     fila_actual = fila_jugador
     columna_actual = columna_jugador
 
     while columna_actual < ancho - 1:
 
-        # opciones posibles de movimiento
+
         opciones = ["derecha"]
 
         if fila_actual > 0:
@@ -230,29 +214,84 @@ def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
 
     salida = (fila_actual, columna_actual)
 
-    # ========================================
+
     # 4. Rellenar todo lo que NO es camino con casillas aleatorias
-    # ========================================
+
     for f in range(alto):
         for c in range(ancho):
 
-            # no sobrescribir el camino real
             if isinstance(mapa[f][c], Camino):
                 continue
 
             mapa[f][c] = crear_casilla_aleatoria()
 
-    # ========================================
-    # 5. Devolver los resultados
-    # ========================================
     return mapa, inicio, salida
 
 # ======= REGISTRO DE JUGADORES ============
 
+def mostrar_mapa_consola(mapa, inicio, salida):
+    for f in range(len(mapa)):
+        linea = ""
+        for c in range(len(mapa[0])):
+
+            if (f, c) == inicio:
+                linea += "🤠"   # jugador
+                continue
+
+            if (f, c) == salida:
+                linea += "🚪"   # salida
+                continue
+
+            celda = mapa[f][c]
+
+            if isinstance(celda, Camino):
+                linea += "  "      # espacio
+            elif isinstance(celda, Muro):
+                linea += "██"      # bloque
+            elif isinstance(celda, Liana):
+                linea += "🌿"
+            elif isinstance(celda, Tunel):
+                linea += "░░"
+            else:
+                linea += "??"
+    
+        print(linea)
+
+
+def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
+    config = CONFIGS_DIFICULTAD[clave_dificultad]
+    print("\n=== MODO ESCAPA ===")
+    print(f"Jugador: {nombre_jugador}")
+    print(f"Dificultad: {config.nombre}")
+
+    # Generar mapa
+    mapa, inicio, salida = generar_mapa()
+
+    # Mostrar el mapa en la terminal 💙
+    print("\nMapa generado (terminal):\n")
+    mostrar_mapa_consola(mapa, inicio, salida)
+
+    print("\nTODO: implementar lógica del modo ESCAPA.\n")
+
+
+def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
+    config = CONFIGS_DIFICULTAD[clave_dificultad]
+    print("\n=== MODO CAZADOR ===")
+    print(f"Jugador: {nombre_jugador}")
+    print(f"Dificultad: {config.nombre}")
+
+    # Generar mapa
+    mapa, inicio, salida = generar_mapa()
+
+    # Mostrar el mapa en la terminal 💙
+    print("\nMapa generado (terminal):\n")
+    mostrar_mapa_consola(mapa, inicio, salida)
+
+    print("\nTODO: implementar lógica del modo CAZADOR.\n")
 
 class RegistroJugadores:
     """
-    Clase sencilla para guardar jugadores y sus puntajes.
+    Clase para guardar jugadores y sus puntajes.
 
     Cada jugador tiene:
     - partidas_jugadas
@@ -311,24 +350,18 @@ class RegistroJugadores:
 
         self.guardar_en_archivo()
 
-    def obtener_datos_jugador(self, nombre):
-        """Devuelve el diccionario del jugador o None si no existe."""
+    def obtener_datos_jugador(self, nombre): # Devuelve el diccionario del jugador o None si no existe.
         return self.jugadores.get(nombre)
 
-    def obtener_todos_los_jugadores(self):
-        """Devuelve una lista con todos los nombres de jugadores registrados."""
+    def obtener_todos_los_jugadores(self): # Devuelve una lista con todos los nombres de jugadores registrados.
         return list(self.jugadores.keys())
 
 
-# ==========================================
 # ============= MENÚS Y MAIN ===============
-# ==========================================
+
 
 def registrar_jugador(registro):
-    """
-    Pide el nombre del jugador por consola.
-    En la versión final, el nombre vendrá desde la interfaz Pygame.
-    """
+
     while True:
         nombre = input("Ingrese su nombre de jugador: ").strip()
         if nombre == "":
@@ -339,11 +372,8 @@ def registrar_jugador(registro):
             return nombre
 
 
-def menu_dificultad():
-    """
-    Menú de selección de dificultad.
-    Devuelve la clave de dificultad (facil, media, dificil).
-    """
+def menu_dificultad(): # Selección de dificultad
+
     print("\nSeleccione la dificultad:")
     print("1. Fácil")
     print("2. Media")
@@ -361,11 +391,8 @@ def menu_dificultad():
             print("Opción inválida. Intente de nuevo.")
 
 
-def menu_modo():
-    """
-    Menú de selección del modo de juego.
-    Devuelve MODO_ESCAPA o MODO_CAZADOR.
-    """
+def menu_modo(): # Selección de modo
+
     print("\nSeleccione el modo de juego:")
     print("1. Modo ESCAPA")
     print("2. Modo CAZADOR")
@@ -380,34 +407,8 @@ def menu_modo():
             print("Opción inválida. Intente de nuevo.")
 
 
-def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
-    """
-    Por ahora solo muestra un mensaje.
-    Más adelante se conectará con la lógica del modo ESCAPA y Pygame.
-    """
-    config = CONFIGS_DIFICULTAD[clave_dificultad]
-    print("\n=== MODO ESCAPA ===")
-    print(f"Jugador: {nombre_jugador}")
-    print(f"Dificultad: {config.nombre}")
-    print("TODO: implementar lógica del modo ESCAPA.\n")
+def mostrar_historial(registro): #     Muestra todos los jugadores y sus estadísticas básicas.
 
-
-def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
-    """
-    Por ahora solo muestra un mensaje.
-    Más adelante se conectará con la lógica del modo CAZADOR y Pygame.
-    """
-    config = CONFIGS_DIFICULTAD[clave_dificultad]
-    print("\n=== MODO CAZADOR ===")
-    print(f"Jugador: {nombre_jugador}")
-    print(f"Dificultad: {config.nombre}")
-    print("TODO: implementar lógica del modo CAZADOR.\n")
-
-
-def mostrar_historial(registro):
-    """
-    Muestra todos los jugadores y sus estadísticas básicas.
-    """
     print("\n=== Historial de jugadores ===")
     nombres = registro.obtener_todos_los_jugadores()
 

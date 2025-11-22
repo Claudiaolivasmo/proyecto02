@@ -13,9 +13,9 @@ import os
 
 RUTA_ARCHIVO_JUGADORES = "jugadores.json"
 
-# ==========================================
+
 # ====== CONSTANTES Y ESTRUCTURA BASE ======
-# ==========================================
+
 
 # Tipos de casilla
 CAMINO = 0

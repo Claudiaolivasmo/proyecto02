@@ -74,22 +74,37 @@ class RegisterMenu:
 class MainMenu:
     def __init__(self, app):
         self.app = app  #Referencia a la aplicación principal
-        self.menu = pygame_menu.Menu(
-            "Escapa del Laberinto",
-            app.WIDTH,
-            app.HEIGHT,
-            theme=pygame_menu.themes.THEME_BLUE,
+        theme_main = pygame_menu.Theme(
+            background_color=(15, 15, 45),
+            title_background_color=(0, 100, 200),
+            title_font_shadow=True,
+            widget_font=pygame_menu.font.FONT_MUNRO,
+            widget_font_size=32,
+            title_font_size=65,
+            widget_padding=18,
+            selection_color=(255, 220, 0),
         )
 
-        #campo de texto
-        self.menu.add.text_input("Nombre: ", onchange=self.app.set_player_name)
+        self.menu = pygame_menu.Menu(
+            "Escape del Laberinto",
+            app.WIDTH,
+            app.HEIGHT,
+            theme=theme_main,
+        )
 
-        #botones
-        self.menu.add.button("Modo Escapa", self.app.game_loop.start_escape_mode)
-        self.menu.add.button("Modo Cazado", self.app.game_loop.start_hunter_mode)
-        self.menu.add.button("Configuración", self.app.game_loop.settings_mode)
-        self.menu.add.button("Puntuaciones", self.app.game_loop.top_scores_mode)
-        self.menu.add.button("Salir",pygame_menu.events.EXIT)
+        #Botones del menú principal
+        self.menu.add.label("Bienvenido, aventurero", font_size=30)
+        self.menu.add.vertical_margin(20)
+
+        self.menu.add.button("   Modo Escapa", self.app.game_loop.start_escape_mode)
+        self.menu.add.button("   Modo Cazador", self.app.game_loop.start_hunter_mode)
+        self.menu.add.button("   Configuración", self.app.game_loop.settings_mode)
+        self.menu.add.button("   Puntuaciones", self.app.game_loop.top_scores_mode)
+
+        self.menu.add.vertical_margin(30)
+        self.menu.add.button("Salir", pygame_menu.events.EXIT)
+
+
     def show(self):
         self.menu.mainloop(self.app.screen)
 

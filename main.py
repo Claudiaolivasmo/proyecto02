@@ -30,18 +30,35 @@ class LaberintoGame:
 class RegisterMenu:
     def __init__(self, app):
         self.app = app
+        
+
+        theme_registro = pygame_menu.Theme(
+            background_color=(20, 20, 20),
+            title_background_color=(0, 120, 200),
+            title_font_shadow=True,
+            widget_font=pygame_menu.font.FONT_MUNRO,
+            widget_font_size=32,
+            title_font_size=60,
+            widget_padding=20,
+            selection_color=(0, 200, 255),
+        )
+
         self.menu = pygame_menu.Menu(
             "Registro de Jugador",
             app.WIDTH,
             app.HEIGHT,
-            theme=pygame_menu.themes.THEME_DARK,
+            theme=theme_registro,
+    )
+  
+        self.menu.add.label("Ingresa tu nombre para comenzar", font_size=28)
+        self.menu.add.text_input(
+            "Nombre: ",
+            onchange=self.app.set_player_name,
+            maxchar=12,
+            
         )
+        self.menu.add.button("Continuar ➤", self.validar_registro)
 
-        #campo de texto para ingresar nombre
-        self.menu.add.text_input("Nombre: ", onchange=self.app.set_player_name)
-
-        #Boton continuar
-        self.menu.add.button("Continuar", self.validar_registro)
 
     def validar_registro(self):
         if self.app.player_name.strip() == "":
@@ -126,6 +143,23 @@ class GameLoop:
 
                 pygame.display.update()
                 clock.tick(60)
+
+#TODO clases pendientes de trabajar después
+class Player:
+    pass
+
+class Enemy:
+    pass
+
+class Map:
+    pass
+
+class Hud:
+    pass
+
+
+
+
 
 
 #Ejecución principal

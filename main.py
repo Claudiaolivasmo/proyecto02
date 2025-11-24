@@ -1,6 +1,8 @@
 import pygame
 import pygame_menu
 
+
+
 pygame.init()
 #TODO Mejor visualmente el menu de registro y principal
 class LaberintoGame:

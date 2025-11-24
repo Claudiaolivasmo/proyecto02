@@ -1,463 +1,386 @@
 import pygame
-import pygame_menu
+import os
 from data.data_manager import DataManager
 
-
 pygame.init()
-#TODO Mejor visualmente el menu de registro y principal
-class LaberintoGame:
+
+# Constantes
+WIDTH, HEIGHT = 800, 600
+FONT_LARGE = pygame.font.Font(None, 50)
+FONT_MEDIUM = pygame.font.Font(None, 35)
+FONT_SMALL = pygame.font.Font(None, 25)
+COLORS = {
+    'BG': (20, 20, 40),
+    'BUTTON': (0, 120, 200),
+    'BUTTON_HOVER': (0, 180, 255),
+    'TEXT': (255, 255, 255),
+    'ERROR': (255, 100, 100),
+    'SUCCESS': (100, 255, 100),
+}
+
+
+class Game:
     def __init__(self):
-        self.WIDTH, self.HEIGHT = 800, 600
-        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Escape del Laberinto")
-
+        self.data_manager = DataManager()
+        self.clock = pygame.time.Clock()
         self.player_name = ""
-        self.data_manager = DataManager()  # Gestor de datos
+        self.current_screen = "registro"
+        self.running = True
 
-        #Primero registro de jugador
-        self.register_menu = RegisterMenu(self)
-        # Primero crear el game loop y luego el menú, porque el menú
-        # usa `app.game_loop` en sus callbacks.
-        self.game_loop = GameLoop(self)
-        self.difficulty_menu_escape = DifficultyMenuEscape(self, self.game_loop)
-        self.difficulty_menu_hunter = DifficultyMenuHunter(self, self.game_loop)
-        self.menu = MainMenu(self) #pasamos la app al menu
+        # Variables para el registro
+        self.input_name = ""
+        self.input_active = False
+        self.error_msg = ""
+        self.error_timer = 0
+
+        # Variables para modo juego
+        self.selected_difficulty = None
+        self.selected_mode = None
 
     def run(self):
-        "Inicia el menú de registro"
-        self.register_menu.show()
+        """Loop principal del juego"""
+        while self.running:
+            self.handle_events()
+            self.update()
+            self.draw()
+            self.clock.tick(60)
 
-    def set_player_name(self, name):
-        self.player_name = name
+        pygame.quit()
 
-    def show_difficulty_escape(self):
-        self.difficulty_menu_escape.show()
-
-    def show_difficulty_hunter(self):
-        self.difficulty_menu_hunter.show()
-
-
-class RegisterMenu:
-    def __init__(self, app):
-        self.app = app
-        self.input_name = ""
-        self.error_msg = ""
+    def handle_events(self):
+        """Manejo de eventos globales"""
+        mouse_pos = pygame.mouse.get_pos()
         
-        theme_registro = pygame_menu.Theme(
-            background_color=(20, 20, 20),
-            title_background_color=(0, 120, 200),
-            title_font_shadow=True,
-            widget_font=pygame_menu.font.FONT_MUNRO,
-            widget_font_size=32,
-            title_font_size=60,
-            widget_padding=20,
-            selection_color=(0, 200, 255),
-        )
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
 
-        self.menu = pygame_menu.Menu(
-            "Acceso al Juego",
-            app.WIDTH,
-            app.HEIGHT,
-            theme=theme_registro,
-        )
-  
-        self.menu.add.label("Bienvenido a Escape del Laberinto", font_size=28)
-        self.menu.add.vertical_margin(10)
-        
-        # Mensaje de error/éxito dinámico
-        self.error_label = self.menu.add.label("", font_size=18, font_color=(255, 100, 100))
-        
-        self.menu.add.vertical_margin(10)
-        self.menu.add.label("Ingresa tu nombre:", font_size=22)
-        
-        # Input de nombre
-        self.name_widget = self.menu.add.text_input(
-            "Nombre: ",
-            onchange=self._update_name,
-            maxchar=15,
-        )
-        
-        self.menu.add.vertical_margin(15)
-        self.menu.add.button("✓ REGISTRARSE", self._register)
-        self.menu.add.button("↳ INICIAR SESIÓN", self._login)
+            if self.current_screen == "registro":
+                self.handle_registro_events(event, mouse_pos)
+            elif self.current_screen == "menu_principal":
+                self.handle_menu_principal_events(event, mouse_pos)
+            elif self.current_screen == "modo_escape":
+                self.handle_dificultad_events(event, mouse_pos, "escape")
+            elif self.current_screen == "modo_cazador":
+                self.handle_dificultad_events(event, mouse_pos, "cazador")
+            elif self.current_screen == "puntajes":
+                self.handle_puntajes_events(event, mouse_pos)
 
-    def _update_name(self, value):
-        """Actualiza el nombre mientras se escribe"""
-        self.input_name = value.strip()
+    def handle_registro_events(self, event, mouse_pos):
+        """Eventos de la pantalla de registro"""
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # Detectar clic en caja de entrada
+            input_box = pygame.Rect(WIDTH // 2 - 150, 250, 300, 50)
+            if input_box.collidepoint(mouse_pos):
+                self.input_active = True
+            else:
+                self.input_active = False
 
-    def _register(self):
-        """Registra un nuevo jugador"""
+            # Botón REGISTRARSE
+            btn_registrar = pygame.Rect(WIDTH // 2 - 200, 350, 150, 50)
+            if btn_registrar.collidepoint(mouse_pos):
+                self.register_player()
+
+            # Botón INICIAR SESIÓN
+            btn_login = pygame.Rect(WIDTH // 2 + 50, 350, 150, 50)
+            if btn_login.collidepoint(mouse_pos):
+                self.login_player()
+
+        if event.type == pygame.KEYDOWN and self.input_active:
+            if event.key == pygame.K_BACKSPACE:
+                self.input_name = self.input_name[:-1]
+            elif event.key == pygame.K_RETURN:
+                self.register_player()
+            elif len(self.input_name) < 15 and event.unicode.isprintable():
+                self.input_name += event.unicode
+
+    def handle_menu_principal_events(self, event, mouse_pos):
+        """Eventos del menú principal"""
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # Botones del menú
+            btn_escape = pygame.Rect(WIDTH // 2 - 150, 150, 300, 60)
+            btn_cazador = pygame.Rect(WIDTH // 2 - 150, 240, 300, 60)
+            btn_puntajes = pygame.Rect(WIDTH // 2 - 150, 330, 300, 60)
+            btn_salir = pygame.Rect(WIDTH // 2 - 150, 420, 300, 60)
+
+            if btn_escape.collidepoint(mouse_pos):
+                self.current_screen = "modo_escape"
+            elif btn_cazador.collidepoint(mouse_pos):
+                self.current_screen = "modo_cazador"
+            elif btn_puntajes.collidepoint(mouse_pos):
+                self.current_screen = "puntajes"
+            elif btn_salir.collidepoint(mouse_pos):
+                self.running = False
+
+    def handle_dificultad_events(self, event, mouse_pos, modo):
+        """Eventos de selección de dificultad"""
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            btn_facil = pygame.Rect(WIDTH // 2 - 150, 180, 300, 60)
+            btn_medio = pygame.Rect(WIDTH // 2 - 150, 270, 300, 60)
+            btn_dificil = pygame.Rect(WIDTH // 2 - 150, 360, 300, 60)
+            btn_atras = pygame.Rect(WIDTH // 2 - 150, 450, 300, 60)
+
+            if btn_facil.collidepoint(mouse_pos):
+                self.play_game(modo, "facil")
+                self.current_screen = "menu_principal"
+            elif btn_medio.collidepoint(mouse_pos):
+                self.play_game(modo, "medio")
+                self.current_screen = "menu_principal"
+            elif btn_dificil.collidepoint(mouse_pos):
+                self.play_game(modo, "dificil")
+                self.current_screen = "menu_principal"
+            elif btn_atras.collidepoint(mouse_pos):
+                self.current_screen = "menu_principal"
+
+        # Presionar ESC para volver
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.current_screen = "menu_principal"
+
+    def handle_puntajes_events(self, event, mouse_pos):
+        """Eventos de la pantalla de puntajes"""
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            btn_atras = pygame.Rect(WIDTH // 2 - 150, 500, 300, 60)
+            if btn_atras.collidepoint(mouse_pos):
+                self.current_screen = "menu_principal"
+
+        # Presionar ESC para volver
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.current_screen = "menu_principal"
+
+    def register_player(self):
+        """Registrar un nuevo jugador"""
         if not self.input_name:
-            self._show_error("Por favor ingresa un nombre.")
+            self.error_msg = "Por favor ingresa un nombre."
+            self.error_timer = pygame.time.get_ticks()
             return
-        
+
         if len(self.input_name) < 2:
-            self._show_error("El nombre debe tener al menos 2 caracteres.")
+            self.error_msg = "El nombre debe tener al menos 2 caracteres."
+            self.error_timer = pygame.time.get_ticks()
             return
-        
+
         if not self.input_name.isalpha():
-            self._show_error("El nombre solo puede contener letras.")
+            self.error_msg = "El nombre solo puede contener letras."
+            self.error_timer = pygame.time.get_ticks()
             return
-        
-        # Registrar en el sistema
-        if self.app.data_manager.register_player(self.input_name):
-            self.app.player_name = self.input_name
-            self._show_success(f"¡Bienvenido, {self.input_name}!")
-            pygame.time.delay(800)
-            self.menu.disable()
-            self.app.menu.show()
-        else:
-            self._show_error("Este nombre ya existe. Intenta otro.")
 
-    def _login(self):
-        """Inicia sesión con un jugador existente"""
+        # Intentar registrar
+        if self.data_manager.register_player(self.input_name):
+            self.player_name = self.input_name
+            self.error_msg = f"¡Bienvenido, {self.input_name}!"
+            self.error_timer = pygame.time.get_ticks()
+            pygame.time.delay(1000)
+            self.current_screen = "menu_principal"
+            self.input_name = ""
+        else:
+            self.error_msg = "Este nombre ya existe. Intenta otro."
+            self.error_timer = pygame.time.get_ticks()
+
+    def login_player(self):
+        """Iniciar sesión con un jugador existente"""
         if not self.input_name:
-            self._show_error("Por favor ingresa un nombre.")
+            self.error_msg = "Por favor ingresa un nombre."
+            self.error_timer = pygame.time.get_ticks()
             return
-        
-        # Buscar jugador
-        user = self.app.data_manager.login_player(self.input_name)
+
+        user = self.data_manager.login_player(self.input_name)
         if user:
-            self.app.player_name = self.input_name
-            self._show_success(f"¡Bienvenido de vuelta, {self.input_name}!")
-            pygame.time.delay(800)
-            self.menu.disable()
-            self.app.menu.show()
+            self.player_name = self.input_name
+            self.error_msg = f"¡Bienvenido de vuelta, {self.input_name}!"
+            self.error_timer = pygame.time.get_ticks()
+            pygame.time.delay(1000)
+            self.current_screen = "menu_principal"
+            self.input_name = ""
         else:
-            self._show_error("Jugador no encontrado. Regístrate primero.")
+            self.error_msg = "Jugador no encontrado. Regístrate primero."
+            self.error_timer = pygame.time.get_ticks()
 
-    def _show_error(self, msg):
-        """Muestra mensaje de error"""
-        self.error_msg = msg
-        try:
-            self.error_label.set_title(msg)
-        except Exception:
-            pass
-
-    def _show_success(self, msg):
-        """Muestra mensaje de éxito"""
-        self.error_msg = msg
-        try:
-            self.error_label.set_title(msg)
-        except Exception:
-            pass
-
-    def show(self):
-        self.menu.mainloop(self.app.screen)
-
-# Clase para el menú principal
-class MainMenu:
-    def __init__(self, app):
-        self.app = app  #Referencia a la aplicación principal
-        theme_main = pygame_menu.Theme(
-            background_color=(15, 15, 45),
-            title_background_color=(0, 100, 200),
-            title_font_shadow=True,
-            widget_font=pygame_menu.font.FONT_MUNRO,
-            widget_font_size=32,
-            title_font_size=65,
-            widget_padding=18,
-            selection_color=(255, 220, 0),
-        )
-
-        self.menu = pygame_menu.Menu(
-            "Escape del Laberinto",
-            app.WIDTH,
-            app.HEIGHT,
-            theme=theme_main,
-        )
-
-        #Botones del menú principal
-        self.menu.add.label(lambda: f"Jugador: {self.app.player_name}", font_size=24, font_color=(100, 200, 255))
-        self.menu.add.vertical_margin(20)
-
-        self.menu.add.button("   Modo Escapa", self.app.show_difficulty_escape)
-        self.menu.add.button("   Modo Cazador", self.app.show_difficulty_hunter)
-        self.menu.add.button("   Ver Puntuaciones", self.show_top_scores)
-        self.menu.add.button("   Configuración", self.app.game_loop.settings_mode)
-
-        self.menu.add.vertical_margin(30)
-        self.menu.add.button("Salir", pygame_menu.events.EXIT)
-
-
-    def show(self):
-        self.menu.mainloop(self.app.screen)
-
-    def show_scores(self):
-        # Aquí iría la lógica para mostrar las puntuaciones
-        print("Mostrando puntuaciones...")
-
-    def show_top_scores(self):
-        """Muestra un menú con el Top 5 de cada modo"""
-        # Recargar datos del archivo para asegurar que están actualizados
-        self.app.data_manager.reload()
-        
-        top_escape = self.app.data_manager.get_top5("escape")
-        top_hunter = self.app.data_manager.get_top5("cazador")
-        
-        theme_scores = pygame_menu.Theme(
-            background_color=(30, 30, 30),
-            title_background_color=(100, 100, 200),
-            title_font_shadow=True,
-            widget_font=pygame_menu.font.FONT_MUNRO,
-            widget_font_size=20,
-            title_font_size=50,
-            widget_padding=10,
-            selection_color=(200, 200, 0),
-        )
-        
-        scores_menu = pygame_menu.Menu(
-            "Puntuaciones - Top 5",
-            self.app.WIDTH,
-            self.app.HEIGHT,
-            theme=theme_scores,
-        )
-        
-        scores_menu.add.label("=== MODO ESCAPA ===", font_size=22, font_color=(100, 200, 255))
-        if top_escape:
-            for i, score in enumerate(top_escape, 1):
-                scores_menu.add.label(
-                    f"{i}. {score['nombre']}: {score['score']} pts",
-                    font_size=18
-                )
-        else:
-            scores_menu.add.label("Sin puntuaciones aún", font_size=18, font_color=(200, 100, 100))
-        
-        scores_menu.add.vertical_margin(20)
-        scores_menu.add.label("=== MODO CAZADOR ===", font_size=22, font_color=(255, 150, 100))
-        if top_hunter:
-            for i, score in enumerate(top_hunter, 1):
-                scores_menu.add.label(
-                    f"{i}. {score['nombre']}: {score['score']} pts",
-                    font_size=18
-                )
-        else:
-            scores_menu.add.label("Sin puntuaciones aún", font_size=18, font_color=(200, 100, 100))
-        
-        scores_menu.add.vertical_margin(20)
-        scores_menu.add.button("← Atrás", pygame_menu.events.BACK)
-        
-        scores_menu.mainloop(self.app.screen)
-
-#TODO mejorar visualmente los menús de dificultad y arreglar pequeños detalles 
-# Menú de dificultad para Modo Escapa
-class DifficultyMenuEscape:
-    def __init__(self, app, game_loop):
-        self.app = app
-        self.game_loop = game_loop
-        
-        theme_difficulty = pygame_menu.Theme(
-            background_color=(25, 25, 50),
-            title_background_color=(0, 150, 200),
-            title_font_shadow=True,
-            widget_font=pygame_menu.font.FONT_MUNRO,
-            widget_font_size=28,
-            title_font_size=55,
-            widget_padding=15,
-            selection_color=(0, 220, 255),
-        )
-
-        self.menu = pygame_menu.Menu(
-            "Modo Escapa - Dificultad",
-            app.WIDTH,
-            app.HEIGHT,
-            theme=theme_difficulty,
-        )
-
-        self.menu.add.label("Selecciona la dificultad", font_size=26)
-        self.menu.add.vertical_margin(15)
-
-        self.menu.add.button("⭐ Fácil", lambda: self.game_loop.start_escape_mode_with_difficulty("facil"))
-        self.menu.add.button("⭐⭐ Intermedio", lambda: self.game_loop.start_escape_mode_with_difficulty("intermedio"))
-        self.menu.add.button("⭐⭐⭐ Difícil", lambda: self.game_loop.start_escape_mode_with_difficulty("dificil"))
-
-        self.menu.add.vertical_margin(20)
-        self.menu.add.button("← Atrás", pygame_menu.events.BACK)
-
-    def show(self):
-        self.menu.mainloop(self.app.screen)
-
-
-# Menú de dificultad para Modo Cazador
-class DifficultyMenuHunter:
-    def __init__(self, app, game_loop):
-        self.app = app
-        self.game_loop = game_loop
-        
-        theme_difficulty = pygame_menu.Theme(
-            background_color=(50, 25, 25),
-            title_background_color=(200, 80, 0),
-            title_font_shadow=True,
-            widget_font=pygame_menu.font.FONT_MUNRO,
-            widget_font_size=28,
-            title_font_size=55,
-            widget_padding=15,
-            selection_color=(255, 150, 0),
-        )
-
-        self.menu = pygame_menu.Menu(
-            "Modo Cazador - Dificultad",
-            app.WIDTH,
-            app.HEIGHT,
-            theme=theme_difficulty,
-        )
-
-        self.menu.add.label("Selecciona la dificultad", font_size=26)
-        self.menu.add.vertical_margin(15)
-
-        self.menu.add.button("🔥 Fácil", lambda: self.game_loop.start_hunter_mode_with_difficulty("facil"))
-        self.menu.add.button("🔥🔥 Intermedio", lambda: self.game_loop.start_hunter_mode_with_difficulty("intermedio"))
-        self.menu.add.button("🔥🔥🔥 Difícil", lambda: self.game_loop.start_hunter_mode_with_difficulty("dificil"))
-
-        self.menu.add.vertical_margin(20)
-        self.menu.add.button("← Atrás", pygame_menu.events.BACK)
-
-    def show(self):
-        self.menu.mainloop(self.app.screen)
-
-
-#game loop
-class GameLoop:
-    def __init__(self, app):
-        self.app = app
-
-    def start_escape_mode(self):
-        print("Iniciando Modo Escapa...")
-        print("Jugador:", self.app.player_name)
-        self.run_game_loop(mode="escape", difficulty="normal")
-        # Aquí iría la lógica del juego para el modo escapa
-
-    def start_escape_mode_with_difficulty(self, difficulty):
-        print("Iniciando Modo Escapa con dificultad:", difficulty)
-        print("Jugador:", self.app.player_name)
-        self.run_game_loop(mode="escape", difficulty=difficulty)
-
-    def start_hunter_mode(self):
-        print("Iniciando Modo Cazado...")
-        print("Jugador:", self.app.player_name)
-        self.run_game_loop(mode="cazador", difficulty="normal")
-
-    def start_hunter_mode_with_difficulty(self, difficulty):
-        print("Iniciando Modo Cazador con dificultad:", difficulty)
-        print("Jugador:", self.app.player_name)
-        self.run_game_loop(mode="cazador", difficulty=difficulty)
-    
-    def settings_mode(self):
-        print("Iniciando Modo Configuración...")
-        print("Jugador:", self.app.player_name)
-        self.run_game_loop(mode="Configuración")
-    
-    def top_scores_mode(self):
-        print("Iniciando Modo Puntuaciones...")
-        print("Jugador:", self.app.player_name)
-        self.run_game_loop(mode="Puntuaciones")
-
-    def run_game_loop(self, mode, difficulty="normal"):
-        """Loop del juego - aquí irá la lógica de juego real"""
-        # Por ahora: mostrar pantalla con el modo y dificultad
-        # Luego pedir puntuación y guardarla
-        running = True
-        clock = pygame.time.Clock()
+    def play_game(self, modo, dificultad):
+        """Simular la partida y pedir puntuación"""
+        # Mostrar pantalla de juego (placeholder)
+        playing = True
         score = 0
+        input_score = ""
 
-        while running:
+        while playing:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    running = False
+                    self.running = False
+                    playing = False
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_SPACE:
-                        # Presionar ESPACIO para terminar el juego (simulación)
-                        running = False
-                
-                #Fondo negro por el momento
-                self.app.screen.fill((0, 0, 0))
+                        # Presionar ESPACIO para terminar el juego
+                        playing = False
 
-                #Texto temporal para distinguir modos
-                font = pygame.font.Font(None, 40)
-                text = font.render(f"Modo: {mode} | Dificultad: {difficulty}", True, (255, 255, 255))
-                self.app.screen.blit(text, (150, 250))
-                
-                # Instrucciones
-                font_small = pygame.font.Font(None, 25)
-                instr = font_small.render("Presiona ESPACIO para terminar", True, (150, 150, 150))
-                self.app.screen.blit(instr, (200, 350))
+            self.screen.fill(COLORS['BG'])
+            title = FONT_LARGE.render(f"Modo: {modo.upper()} - {dificultad.upper()}", True, COLORS['TEXT'])
+            instr = FONT_SMALL.render("Presiona ESPACIO para terminar", True, (150, 150, 150))
+            self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, HEIGHT // 2 - 100))
+            self.screen.blit(instr, (WIDTH // 2 - instr.get_width() // 2, HEIGHT // 2 + 50))
+            pygame.display.flip()
+            self.clock.tick(60)
 
-                pygame.display.update()
-                clock.tick(60)
+        # Pedir puntuación
+        self.ask_for_score(modo, dificultad)
 
-        # Al terminar, pedir puntuación y guardar
-        self._save_and_show_result(mode, difficulty)
+    def ask_for_score(self, modo, dificultad):
+        """Pantalla para ingresar la puntuación"""
+        asking = True
+        input_score = ""
 
-    def _save_and_show_result(self, mode, difficulty):
-        """Muestra un menú para ingresar puntuación y la guarda"""
-        score_input = 0
-        
-        theme_result = pygame_menu.Theme(
-            background_color=(40, 40, 60),
-            title_background_color=(200, 100, 100),
-            title_font_shadow=True,
-            widget_font=pygame_menu.font.FONT_MUNRO,
-            widget_font_size=28,
-            title_font_size=50,
-            widget_padding=15,
-            selection_color=(255, 200, 100),
-        )
-        
-        result_menu = pygame_menu.Menu(
-            "Resultado del Juego",
-            self.app.WIDTH,
-            self.app.HEIGHT,
-            theme=theme_result,
-        )
-        
-        result_menu.add.label(f"Modo: {mode.capitalize()} | Dificultad: {difficulty}", font_size=22)
-        result_menu.add.label(f"Jugador: {self.app.player_name}", font_size=20, font_color=(100, 200, 255))
-        
-        result_menu.add.vertical_margin(20)
-        result_menu.add.label("Ingresa tu puntuación:", font_size=24)
-        
-        def update_score(value):
-            nonlocal score_input
-            try:
-                score_input = int(value) if value else 0
-            except ValueError:
-                score_input = 0
-        
-        # input_type removed for compatibility; parse int in update_score
-        result_menu.add.text_input("Puntos: ", onchange=update_score, maxchar=5)
-        
-        def save_score():
-            if score_input > 0:
-                # Normalizar modo a minúsculas para que sea compatible con add_score
-                mode_lower = mode.lower()
-                self.app.data_manager.add_score(self.app.player_name, score_input, mode_lower)
-            result_menu._close()
-        
-        result_menu.add.button("Guardar y Volver", save_score)
-        result_menu.add.button("← Atrás (sin guardar)", pygame_menu.events.BACK)
-        result_menu.mainloop(self.app.screen)
+        while asking:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    asking = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        # Guardar puntuación
+                        try:
+                            score = int(input_score) if input_score else 0
+                            if score > 0:
+                                self.data_manager.add_score(self.player_name, score, modo)
+                        except ValueError:
+                            pass
+                        asking = False
+                    elif event.key == pygame.K_BACKSPACE:
+                        input_score = input_score[:-1]
+                    elif event.unicode.isdigit():
+                        input_score += event.unicode
 
-#TODO clases pendientes de trabajar después
-class Player:
-    pass
+            self.screen.fill(COLORS['BG'])
+            title = FONT_LARGE.render("Ingresa tu puntuación", True, COLORS['TEXT'])
+            input_text = FONT_MEDIUM.render(f"Puntos: {input_score}", True, COLORS['TEXT'])
+            instr = FONT_SMALL.render("Presiona ENTER para guardar", True, (150, 150, 150))
 
-class Enemy:
-    pass
+            self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, HEIGHT // 2 - 100))
+            self.screen.blit(input_text, (WIDTH // 2 - input_text.get_width() // 2, HEIGHT // 2))
+            self.screen.blit(instr, (WIDTH // 2 - instr.get_width() // 2, HEIGHT // 2 + 100))
 
-class Map:
-    pass
+            pygame.display.flip()
+            self.clock.tick(60)
 
-class Hud:
-    pass
+    def update(self):
+        """Actualizar lógica del juego"""
+        mouse_pos = pygame.mouse.get_pos()
+        # Aquí iría la lógica de hover de botones si es necesario
+
+    def draw(self):
+        """Dibujar la pantalla actual"""
+        self.screen.fill(COLORS['BG'])
+
+        if self.current_screen == "registro":
+            self.draw_registro()
+        elif self.current_screen == "menu_principal":
+            self.draw_menu_principal()
+        elif self.current_screen == "modo_escape":
+            self.draw_dificultad("MODO ESCAPA")
+        elif self.current_screen == "modo_cazador":
+            self.draw_dificultad("MODO CAZADOR")
+        elif self.current_screen == "puntajes":
+            self.draw_puntajes()
+
+        pygame.display.flip()
+
+    def draw_registro(self):
+        """Dibujar pantalla de registro"""
+        # Título
+        title = FONT_LARGE.render("Acceso al Juego", True, COLORS['TEXT'])
+        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 50))
+
+        # Mensaje de error/éxito
+        if self.error_msg and pygame.time.get_ticks() - self.error_timer < 2000:
+            color = COLORS['SUCCESS'] if "Bienvenido" in self.error_msg else COLORS['ERROR']
+            error = FONT_SMALL.render(self.error_msg, True, color)
+            self.screen.blit(error, (WIDTH // 2 - error.get_width() // 2, 120))
+
+        # Caja de entrada
+        label = FONT_MEDIUM.render("Nombre:", True, COLORS['TEXT'])
+        self.screen.blit(label, (WIDTH // 2 - 300, 220))
+
+        input_box = pygame.Rect(WIDTH // 2 - 150, 250, 300, 50)
+        pygame.draw.rect(self.screen, (100, 100, 100), input_box, border_radius=5)
+        pygame.draw.rect(self.screen, (0, 200, 255) if self.input_active else (100, 100, 100), input_box, 2, border_radius=5)
+
+        input_text = FONT_MEDIUM.render(self.input_name, True, COLORS['TEXT'])
+        self.screen.blit(input_text, (input_box.x + 10, input_box.y + 10))
+
+        # Botón REGISTRARSE
+        btn_registrar = pygame.Rect(WIDTH // 2 - 200, 350, 150, 50)
+        pygame.draw.rect(self.screen, COLORS['BUTTON'], btn_registrar, border_radius=5)
+        registrar_text = FONT_SMALL.render("REGISTRARSE", True, COLORS['TEXT'])
+        self.screen.blit(registrar_text, (btn_registrar.x + 10, btn_registrar.y + 10))
+
+        # Botón INICIAR SESIÓN
+        btn_login = pygame.Rect(WIDTH // 2 + 50, 350, 150, 50)
+        pygame.draw.rect(self.screen, COLORS['BUTTON'], btn_login, border_radius=5)
+        login_text = FONT_SMALL.render("INICIAR SESIÓN", True, COLORS['TEXT'])
+        self.screen.blit(login_text, (btn_login.x + 10, btn_login.y + 10))
+
+    def draw_menu_principal(self):
+        """Dibujar menú principal"""
+        # Título con nombre del jugador
+        title = FONT_LARGE.render("Escape del Laberinto", True, COLORS['TEXT'])
+        player_label = FONT_MEDIUM.render(f"Jugador: {self.player_name}", True, (100, 200, 255))
+        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 30))
+        self.screen.blit(player_label, (WIDTH // 2 - player_label.get_width() // 2, 100))
+
+        # Botones
+        self.draw_button(WIDTH // 2 - 150, 150, 300, 60, "Modo Escapa")
+        self.draw_button(WIDTH // 2 - 150, 240, 300, 60, "Modo Cazador")
+        self.draw_button(WIDTH // 2 - 150, 330, 300, 60, "Puntajes")
+        self.draw_button(WIDTH // 2 - 150, 420, 300, 60, "Salir")
+
+    def draw_dificultad(self, titulo):
+        """Dibujar pantalla de selección de dificultad"""
+        title = FONT_LARGE.render(titulo, True, COLORS['TEXT'])
+        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 50))
+
+        label = FONT_MEDIUM.render("Selecciona dificultad:", True, COLORS['TEXT'])
+        self.screen.blit(label, (WIDTH // 2 - label.get_width() // 2, 120))
+
+        self.draw_button(WIDTH // 2 - 150, 180, 300, 60, "⭐ Fácil")
+        self.draw_button(WIDTH // 2 - 150, 270, 300, 60, "⭐⭐ Medio")
+        self.draw_button(WIDTH // 2 - 150, 360, 300, 60, "⭐⭐⭐ Difícil")
+        self.draw_button(WIDTH // 2 - 150, 450, 300, 60, "← Atrás")
+
+    def draw_puntajes(self):
+        """Dibujar pantalla de puntajes"""
+        title = FONT_LARGE.render("Top 5 - Puntajes", True, COLORS['TEXT'])
+        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 30))
+
+        # Recargar datos
+        self.data_manager.reload()
+
+        # Top 5 Escape
+        escape_label = FONT_MEDIUM.render("=== MODO ESCAPA ===", True, (100, 200, 255))
+        self.screen.blit(escape_label, (WIDTH // 2 - escape_label.get_width() // 2, 100))
+
+        top_escape = self.data_manager.get_top5("escape")
+        for i, score in enumerate(top_escape):
+            score_text = FONT_SMALL.render(f"{i + 1}. {score['nombre']}: {score['score']} pts", True, COLORS['TEXT'])
+            self.screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 150 + i * 30))
+
+        if not top_escape:
+            no_scores = FONT_SMALL.render("Sin puntuaciones aún", True, COLORS['ERROR'])
+            self.screen.blit(no_scores, (WIDTH // 2 - no_scores.get_width() // 2, 150))
+
+        # Botón Atrás
+        self.draw_button(WIDTH // 2 - 150, 500, 300, 60, "← Atrás")
+
+    def draw_button(self, x, y, width, height, text):
+        """Dibujar un botón"""
+        rect = pygame.Rect(x, y, width, height)
+        pygame.draw.rect(self.screen, COLORS['BUTTON'], rect, border_radius=5)
+        button_text = FONT_MEDIUM.render(text, True, COLORS['TEXT'])
+        self.screen.blit(button_text, (rect.x + width // 2 - button_text.get_width() // 2,
+                                       rect.y + height // 2 - button_text.get_height() // 2))
 
 
-
-
-
-
-#Ejecución principal
 if __name__ == "__main__":
-    app = LaberintoGame()
-    app.run()
-
-#
+    game = Game()
+    game.run()

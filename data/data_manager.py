@@ -62,12 +62,17 @@ class DataManager:
 
     
     #registro de jugador
-    def register_player(self, name:str):
-        exists = any(p["name"] == name for p in self.data["players"])
-        if not exists:
-            new_player = Player(name)
-            self.data["players"].append(new_player.to_dict())
-            self.save()
+    def register_player(self, name: str):
+        # Validar si ya existe
+        exists = any(p["name"].lower() == name.lower() for p in self.data["players"])
+        if exists:
+            return False  # indica que ya existe
+
+        # Registrar nuevo
+        new_player = Player(name)
+        self.data["players"].append(new_player.to_dict())
+        self.save()
+        return True  # se registró correctamente
 
 
     #Agregar puntajes por modo de juego

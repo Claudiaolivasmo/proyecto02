@@ -1,10 +1,18 @@
 {
-    "escapa": [
-        {"nombre": "Mainor", "puntaje": 1200},
-        {"nombre": "Claudia", "puntaje": 900}
-    ],
-    "cazador": [
-        {"nombre": "Mainor", "puntaje": 700},
-        {"nombre": "Claudia", "puntaje": 400}
+    "usuarios": [
+        {
+            "nombre": "Mainor",
+            "mejor_escapa": 1500,
+            "mejor_cazador": 800,
+            "historial_escapa": [1200, 1100, 1500],
+            "historial_cazador": [500, 800, 750]
+        },
+        {
+            "nombre": "Claudia",
+            "mejor_escapa": 900,
+            "mejor_cazador": 400,
+            "historial_escapa": [900],
+            "historial_cazador": [400]
+        }
     ]
 }

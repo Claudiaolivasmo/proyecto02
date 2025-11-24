@@ -1,97 +1,69 @@
 import json
-from datetime import datetime
 import os
 
 SCORES_PATH = os.path.join('data','assets','scores.json')
 
-
-#clase jugador
-class Player:
-    def __init__(self, name:str):
+#TODO terminar todos los metodos de este archivo para manejar usuarios y puntuaciones
+class User:
+    def __init__(self, name):
         self.name = name
-    
-    def to_dict(self):
-        return {"name": self.name}
-    
+        self.best_escape = 0
+        self.best_hunter = 0
+        self.escape_history = []
+        self.hunter_history = []
 
-#clase Score (puntaje)
+    def add_score(self, score, mode):
+        pass
+
+    def update_best_score(self, score, mode):
+        pass
 
 
-class Score:
-    def __init__(self,name:str, points:int, date:str):
-        self.name = name
-        self.points = points
-        self.date = date
-        
-    def to_dict(self):
-        return {
-            "name": self.name,
-            "points": self.points,
-            "date": self.date
-        }
-    
-#TODO terminar métodos para manejar puntuaciones y jugadores de la clase DataManager
-#clase principal para manejar datos
+class User_manager:
+    def __init__(self, data_manager):
+        self.data_manager = data_manager
+        self.users = []
+
+    def load_users(self):
+        pass
+
+    def save_users(self):
+        pass
+
+    def user_exists(self, name):
+        pass
+
+    def register_user(self, name):
+        pass
+
+    def login_user(self, name):
+        pass
+
+    def get_user(self, name):
+        pass
+
+
+
+class ScoreManager:
+    def __init__(self,user_manager):
+        self.user_manager = user_manager
+
+    def add_score(self,name, score, mode):
+        pass
+
+    def get_top5(self, mode):
+        pass
+    def sort_scores(self, scores, mode):
+        pass
+    def get_history(self, name, mode):
+        pass
+
+
 class DataManager:
-    def __init__(self,file_path=SCORES_PATH):
-        self.file_path = file_path
-        
+    def __init__(self,file_path):
+        self.file_path = SCORES_PATH
 
-        #si no existe el archivo, crearlo
-        if not os.path.exists(self.file_path):
-            self._create_file()
-
-        self.data = self.load()
-
-    #crear archivo si no existe
-    def create_file(self):
-        base_structure = {     #estructura del del archivo json si no existe ningún dato
-            "players": [],
-            "scores": {
-                "escape": [],
-                "hunter": []
-            }
-
-        }
-        with open(self.file_path, 'w') as f:
-            json.dump(base_structure, f, indent=4)
-
-    def save(self):
-        with open(self.file_path, 'w') as f:
-            json.dump(self.data, f, indent=4)
-
-    
-    #registro de jugador
-    def register_player(self, name: str):
-        # Validar si ya existe
-        exists = any(p["name"].lower() == name.lower() for p in self.data["players"])
-        if exists:
-            return False  # indica que ya existe
-
-        # Registrar nuevo
-        new_player = Player(name)
-        self.data["players"].append(new_player.to_dict())
-        self.save()
-        return True  # se registró correctamente
-
-
-    #Agregar puntajes por modo de juego
-    def add_score(self, name:str, points:int, mode:str):
-        date = datetime.now().strftime("%Y-%m-%d")
-        new_score = Score(name, points, date)
-        self.data["scores"][mode] == sorted(
-            self.data["scores"][mode],
-            key=lambda s: s["points"],
-            reverse=True
-        )
-
-        #Mantener solo el top 5
-        self.data["scores"][mode] = self.data["scores"][mode][:5]
-        self.save()
-
-
-        #Obtene el Top de un modo de juego
-    def get_top (self, mode:str):
-            return self.data["scores"][mode]
-    
-#TODO PROBAR LAS FUNCIONES DE ESTA CLASE
+    def load(self):
+        pass
+    def save(self,data):
+        pass

@@ -26,7 +26,6 @@ class LaberintoGame:
 
     def set_player_name(self, name):
         self.player_name = name
-        print(f"Nombre del jugador establecido a: {self.player_name}")
 
 
 class RegisterMenu:
@@ -54,12 +53,13 @@ class RegisterMenu:
   
         self.menu.add.label("Ingresa tu nombre para comenzar", font_size=28)
         self.menu.add.text_input(
-            "Nombre: ",
+            " ",
             onchange=self.app.set_player_name,
             maxchar=12,
             
         )
-        self.menu.add.button("Continuar ➤", self.validar_registro)
+        self.menu.add.button("REGISTRARSE", self.validar_registro)
+        self.menu.add.button("INICIAR SESION", self.validar_registro)
 
 
     def validar_registro(self):

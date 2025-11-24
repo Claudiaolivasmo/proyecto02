@@ -213,3 +213,5 @@ class DataManager:
     def get_all_players(self):
         """Obtiene lista de todos los jugadores"""
         return self.data["players"]
+    
+#

@@ -2,17 +2,37 @@
     "usuarios": [
         {
             "nombre": "Mainor",
-            "mejor_escapa": 1500,
+            "mejor_escapa": 2000,
             "mejor_cazador": 800,
-            "historial_escapa": [1200, 1100, 1500],
-            "historial_cazador": [500, 800, 750]
+            "historial_escapa": [
+                1200,
+                1100,
+                1500,
+                2000
+            ],
+            "historial_cazador": [
+                500,
+                800,
+                750
+            ]
         },
         {
             "nombre": "Claudia",
             "mejor_escapa": 900,
             "mejor_cazador": 400,
-            "historial_escapa": [900],
-            "historial_cazador": [400]
+            "historial_escapa": [
+                900
+            ],
+            "historial_cazador": [
+                400
+            ]
+        },
+        {
+            "nombre": "Pedro",
+            "mejor_escapa": 0,
+            "mejor_cazador": 0,
+            "historial_escapa": [],
+            "historial_cazador": []
         }
     ]
 }

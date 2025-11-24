@@ -189,6 +189,9 @@ class MainMenu:
 
     def show_top_scores(self):
         """Muestra un menú con el Top 5 de cada modo"""
+        # Recargar datos del archivo para asegurar que están actualizados
+        self.app.data_manager.reload()
+        
         top_escape = self.app.data_manager.get_top5("escape")
         top_hunter = self.app.data_manager.get_top5("cazador")
         
@@ -214,7 +217,7 @@ class MainMenu:
         if top_escape:
             for i, score in enumerate(top_escape, 1):
                 scores_menu.add.label(
-                    f"{i}. {score['name']}: {score['score']} pts",
+                    f"{i}. {score['nombre']}: {score['score']} pts",
                     font_size=18
                 )
         else:
@@ -225,7 +228,7 @@ class MainMenu:
         if top_hunter:
             for i, score in enumerate(top_hunter, 1):
                 scores_menu.add.label(
-                    f"{i}. {score['name']}: {score['score']} pts",
+                    f"{i}. {score['nombre']}: {score['score']} pts",
                     font_size=18
                 )
         else:
@@ -420,14 +423,18 @@ class GameLoop:
             except ValueError:
                 score_input = 0
         
-        result_menu.add.text_input("Puntos: ", onchange=update_score, input_type=pygame_menu.widgets.PYGAME_INPUT_INT, maxchar=5)
+        # input_type removed for compatibility; parse int in update_score
+        result_menu.add.text_input("Puntos: ", onchange=update_score, maxchar=5)
         
         def save_score():
             if score_input > 0:
-                self.app.data_manager.add_score(self.app.player_name, score_input, mode)
-                result_menu.disable()
+                # Normalizar modo a minúsculas para que sea compatible con add_score
+                mode_lower = mode.lower()
+                self.app.data_manager.add_score(self.app.player_name, score_input, mode_lower)
+            result_menu._close()
         
         result_menu.add.button("Guardar y Volver", save_score)
+        result_menu.add.button("← Atrás (sin guardar)", pygame_menu.events.BACK)
         result_menu.mainloop(self.app.screen)
 
 #TODO clases pendientes de trabajar después

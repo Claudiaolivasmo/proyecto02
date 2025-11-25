@@ -188,6 +188,169 @@ class Jugador:
         return self.energia_actual <= 0
 
 
+class Enemigo:
+    """
+    Representa a un cazador dentro del mapa.
+    Solo puede pisar casillas permitidas para enemigo.
+    """
+
+    def __init__(self, fila_inicial, columna_inicial):
+        self.fila = fila_inicial
+        self.columna = columna_inicial
+        self.vivo = True
+
+def mover_enemigo_hacia_jugador(enemigo, jugador, mapa):
+    """
+    Mueve un enemigo un paso hacia el jugador, si es posible.
+    Usa una lógica simple: intenta reducir la distancia en fila/columna.
+    """
+    mejor_fila = enemigo.fila
+    mejor_col = enemigo.columna
+
+    # Distancia actual
+    dist_f = jugador.fila - enemigo.fila
+    dist_c = jugador.columna - enemigo.columna
+
+    # Lista de posibles movimientos (fila_delta, col_delta)
+    movimientos = []
+
+    # Si el jugador está arriba, probamos subir
+    if dist_f < 0:
+        movimientos.append((-1, 0))
+    # Si está abajo, probamos bajar
+    if dist_f > 0:
+        movimientos.append((1, 0))
+    # Si está a la izquierda, probamos izquierda
+    if dist_c < 0:
+        movimientos.append((0, -1))
+    # Si está a la derecha, probamos derecha
+    if dist_c > 0:
+        movimientos.append((0, 1))
+
+    # Si no hay preferencia (mismo lugar), no se mueve
+    if len(movimientos) == 0:
+        return
+
+    filas = len(mapa)
+    columnas = len(mapa[0])
+
+    # Intentar movimientos en orden (el primero que sirva)
+    for delta_f, delta_c in movimientos:
+        nueva_f = enemigo.fila + delta_f
+        nueva_c = enemigo.columna + delta_c
+
+        # Bordes
+        if nueva_f < 0 or nueva_f >= filas:
+            continue
+        if nueva_c < 0 or nueva_c >= columnas:
+            continue
+
+        casilla = mapa[nueva_f][nueva_c]
+        if not casilla.puede_pisar_enemigo():
+            continue
+
+        # Movimiento válido
+        enemigo.fila = nueva_f
+        enemigo.columna = nueva_c
+        return  # solo un paso
+
+
+def mover_enemigo_huyendo_jugador(enemigo, jugador, mapa):
+    """
+    Mueve un enemigo un paso alejándose del jugador, si es posible.
+    Intenta aumentar la distancia en fila/columna.
+    """
+    # Diferencias actuales
+    dist_f = jugador.fila - enemigo.fila
+    dist_c = jugador.columna - enemigo.columna
+
+    movimientos = []
+
+    # Si el jugador está arriba (dist_f < 0), el enemigo intenta ir abajo
+    if dist_f < 0:
+        movimientos.append((1, 0))
+    # Si el jugador está abajo (dist_f > 0), intenta ir arriba
+    if dist_f > 0:
+        movimientos.append((-1, 0))
+    # Si el jugador está a la izquierda (dist_c < 0), intenta ir derecha
+    if dist_c < 0:
+        movimientos.append((0, 1))
+    # Si el jugador está a la derecha (dist_c > 0), intenta ir izquierda
+    if dist_c > 0:
+        movimientos.append((0, -1))
+
+    # Si jugador y enemigo están en la misma fila y columna (raro), no hay preferencia
+    if len(movimientos) == 0:
+        return
+
+    filas = len(mapa)
+    columnas = len(mapa[0])
+
+    for delta_f, delta_c in movimientos:
+        nueva_f = enemigo.fila + delta_f
+        nueva_c = enemigo.columna + delta_c
+
+        if nueva_f < 0 or nueva_f >= filas:
+            continue
+        if nueva_c < 0 or nueva_c >= columnas:
+            continue
+
+        casilla = mapa[nueva_f][nueva_c]
+        if not casilla.puede_pisar_enemigo():
+            continue
+
+        enemigo.fila = nueva_f
+        enemigo.columna = nueva_c
+        return  # solo un paso
+
+
+def mover_enemigos_huyendo(enemigos, jugador, mapa):
+    """
+    Mueve todos los enemigos un paso alejándose del jugador.
+    """
+    for enemigo in enemigos:
+        if enemigo.vivo:
+            mover_enemigo_huyendo_jugador(enemigo, jugador, mapa)
+
+
+
+def crear_enemigos_iniciales(mapa, cantidad, jugador, salida):
+    """
+    Crea 'cantidad' enemigos en posiciones aleatorias del mapa.
+    No los coloca encima del jugador ni de la salida.
+    Solo en casillas donde puede pisar enemigo.
+    """
+    enemigos = []
+
+    filas = len(mapa)
+    columnas = len(mapa[0])
+
+    while len(enemigos) < cantidad:
+        fila = random.randint(0, filas - 1)
+        col = random.randint(0, columnas - 1)
+
+        # Evitar jugador y salida
+        if fila == jugador.fila and col == jugador.columna:
+            continue
+        if (fila, col) == salida:
+            continue
+
+        casilla = mapa[fila][col]
+        if not casilla.puede_pisar_enemigo():
+            continue
+
+        enemigos.append(Enemigo(fila, col))
+
+    return enemigos
+
+
+def mover_enemigos(enemigos, jugador, mapa):
+    """
+    Mueve todos los enemigos un paso hacia el jugador.
+    """
+    for enemigo in enemigos:
+        if enemigo.vivo:
+            mover_enemigo_hacia_jugador(enemigo, jugador, mapa)
 
 def crear_casilla_aleatoria(): # Crea una casilla aleatoria de cualquiera de los 4 tipos.
 
@@ -341,16 +504,51 @@ def mover_jugador(jugador, direccion, mapa, config_dificultad, correr=False):
 def recuperar_energia_jugador(jugador, config_dificultad):
     jugador.recuperar_energia(config_dificultad.recuperacion_pasiva)
 
+def hay_colision_con_enemigo(jugador, enemigos):
+    """
+    Devuelve True si algún enemigo está en la misma casilla que el jugador.
+    """
+    for enemigo in enemigos:
+        if enemigo.vivo and enemigo.fila == jugador.fila and enemigo.columna == jugador.columna:
+            return True
+    return False
 
+def calcular_puntaje(movimientos, config_dificultad):
+    """
+    Calcula el puntaje:
+    - Base: 1000 - (movimientos * 10)  (mínimo 0)
+    - Multiplicador según dificultad (más enemigos / velocidad => más puntos)
+    """
+    base = 1000 - movimientos * 10
+    if base < 0:
+        base = 0
 
-# ======= REGISTRO DE JUGADORES ============
+    # Multiplicador por dificultad
+    # Puedes ajustar estos valores si quieres
+    if config_dificultad.nombre == DIFICULTAD_FACIL:
+        mult_dif = 1.0
+    elif config_dificultad.nombre == DIFICULTAD_MEDIA:
+        mult_dif = 1.5
+    else:  # dificil
+        mult_dif = 2.0
 
-def mostrar_mapa_consola(mapa, jugador, salida):
+    # Multiplicador adicional por cant_enemigos y "velocidad"
+    extra = 1.0
+    extra += (config_dificultad.cant_enemigos - 2) * 0.1  # más enemigos => más puntos
+    extra += (1.0 / config_dificultad.vel_enemigos) * 0.2  # cuanto más seguidos se muevan, más recompensa
+
+    puntaje = int(base * mult_dif * extra)
+    if puntaje < 0:
+        puntaje = 0
+
+    return puntaje
+
+def mostrar_mapa_consola(mapa, jugador, salida, enemigos):
     """
     Muestra el mapa en consola.
-    - 🤠 = jugador (posición actual)
+    - 🤠 = jugador
+    - 👹 = enemigo
     - 🚪 = salida
-    - El resto según el tipo de casilla
     """
     for f in range(len(mapa)):
         linea = ""
@@ -359,6 +557,16 @@ def mostrar_mapa_consola(mapa, jugador, salida):
             # Jugador
             if f == jugador.fila and c == jugador.columna:
                 linea += "🤠"
+                continue
+
+            # Enemigo (si hay alguno en esta casilla)
+            hay_enemigo = False
+            for enemigo in enemigos:
+                if enemigo.vivo and enemigo.fila == f and enemigo.columna == c:
+                    linea += "👹"
+                    hay_enemigo = True
+                    break
+            if hay_enemigo:
                 continue
 
             # Salida
@@ -371,7 +579,7 @@ def mostrar_mapa_consola(mapa, jugador, salida):
             if isinstance(celda, Camino):
                 linea += "  "      # espacio
             elif isinstance(celda, Muro):
-                linea += "██"      # bloque
+                linea += "██"
             elif isinstance(celda, Liana):
                 linea += "🌿"
             elif isinstance(celda, Tunel):
@@ -381,6 +589,8 @@ def mostrar_mapa_consola(mapa, jugador, salida):
 
         print(linea)
 
+
+# ======= REGISTRO DE JUGADORES ============
 
 def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
     config = CONFIGS_DIFICULTAD[clave_dificultad]
@@ -393,9 +603,14 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
 
     jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
 
-    # Primer dibujo del mapa
-    os.system("cls")  # limpia la consola en Windows
-    mostrar_mapa_consola(mapa, jugador, salida)
+    # Crear enemigos iniciales
+    enemigos = crear_enemigos_iniciales(mapa, config.cant_enemigos, jugador, salida)
+
+    movimientos_jugador = 0  # cuenta de movimientos
+    turnos = 0               # para velocidad de enemigos
+
+    os.system("cls")  # limpiar pantalla en Windows
+    mostrar_mapa_consola(mapa, jugador, salida, enemigos)
     print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
     print("\nUse comandos: w/a/s/d para moverse, x para salir.")
 
@@ -403,6 +618,7 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
         tecla = input("\nMovimiento: ").lower()
 
         if tecla == "x":
+            print("Has salido del modo ESCAPA.")
             break
 
         se_movio = False
@@ -418,19 +634,41 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
         else:
             print("Tecla no válida. Use w/a/s/d o x para salir.")
 
-        # Si se movió, mostramos el mapa actualizado
-        if se_movio:
-            os.system("cls")  # limpia la consola
-            mostrar_mapa_consola(mapa, jugador, salida)
-            print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
-            print(f"Posición: ({jugador.fila}, {jugador.columna})")
+        if not se_movio:
+            continue  # no hay turno si no se movió
 
-            # ¿Llegó a la salida?
-            if jugador.fila == salida[0] and jugador.columna == salida[1]:
-                print("\n🎉 ¡Has llegado a la salida del laberinto! 🎉")
-                break
-        else:
-            print("No te puedes mover en esa dirección.")
+        movimientos_jugador += 1
+        turnos += 1
+
+        # ¿Llegó a la salida antes que lo atrapen?
+        if jugador.fila == salida[0] and jugador.columna == salida[1]:
+            os.system("cls")
+            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+            print("\n🎉 ¡Has llegado a la salida del laberinto! 🎉")
+            puntaje = calcular_puntaje(movimientos_jugador, config)
+            print(f"\nTu puntaje: {puntaje}")
+            # Aquí luego puedes llamar a registrar_partida(...)
+            break
+
+        # Mover enemigos según la "velocidad" de la dificultad
+        # En fácil (2) se mueven cada 2 turnos, en media/difícil (1) cada turno
+        if turnos % config.vel_enemigos == 0:
+            mover_enemigos(enemigos, jugador, mapa)
+
+        # ¿Algún enemigo lo atrapó?
+        if hay_colision_con_enemigo(jugador, enemigos):
+            os.system("cls")
+            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+            print("\n💀 Un cazador te ha atrapado. Has perdido. 💀")
+            puntaje = 0  # puedes ajustar si quieres otra lógica
+            print(f"\nTu puntaje: {puntaje}")
+            break
+
+        # Redibujar mapa
+        os.system("cls")
+        mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+        print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
+        print(f"Movimientos: {movimientos_jugador}")
 
 
 def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
@@ -439,15 +677,90 @@ def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
     print(f"Jugador: {nombre_jugador}")
     print(f"Dificultad: {config.nombre}")
 
+    # Generar mapa y jugador
     mapa, inicio, salida = generar_mapa()
     fila_ini, col_ini = inicio
     jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
 
-    print("\nMapa generado (terminal):\n")
-    mostrar_mapa_consola(mapa, jugador, salida)
+    # Crear las "presas" iniciales (usamos la misma función de enemigos)
+    enemigos = crear_enemigos_iniciales(mapa, config.cant_enemigos, jugador, salida)
 
-    print("\nTODO: implementar lógica del modo CAZADOR.\n")
+    movimientos_jugador = 0
+    turnos = 0
+    atrapados = 0
+    total_enemigos = len(enemigos)
 
+    os.system("cls")
+    mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+    print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
+    print(f"Enemigos restantes: {total_enemigos - atrapados}")
+    print("\nUse comandos: w/a/s/d para moverse, x para salir.")
+
+    while True:
+        tecla = input("\nMovimiento: ").lower()
+
+        if tecla == "x":
+            print("Has salido del modo CAZADOR.")
+            break
+
+        se_movio = False
+
+        if tecla == "w":
+            se_movio = mover_jugador(jugador, "arriba", mapa, config)
+        elif tecla == "s":
+            se_movio = mover_jugador(jugador, "abajo", mapa, config)
+        elif tecla == "a":
+            se_movio = mover_jugador(jugador, "izquierda", mapa, config)
+        elif tecla == "d":
+            se_movio = mover_jugador(jugador, "derecha", mapa, config)
+        else:
+            print("Tecla no válida. Use w/a/s/d o x para salir.")
+
+        if not se_movio:
+            continue
+
+        movimientos_jugador += 1
+        turnos += 1
+
+        # 1) Revisar si el jugador atrapó a algún enemigo
+        for enemigo in enemigos:
+            if enemigo.vivo and enemigo.fila == jugador.fila and enemigo.columna == jugador.columna:
+                enemigo.vivo = False
+                atrapados += 1
+                print("🎯 ¡Has atrapado a un enemigo!")
+
+        # 2) ¿Ya atrapó a todos?
+        if atrapados == total_enemigos:
+            os.system("cls")
+            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+            print("\n🎉 ¡Has atrapado a todos los enemigos! 🎉")
+            puntaje = calcular_puntaje(movimientos_jugador, config)
+            print(f"\nTu puntaje en modo CAZADOR: {puntaje}")
+            # Más adelante: registrar_partida(nombre_jugador, puntaje) para este modo
+            break
+
+        # 3) Mover enemigos huyendo, según velocidad configurada
+        if turnos % config.vel_enemigos == 0:
+            mover_enemigos_huyendo(enemigos, jugador, mapa)
+
+        # 4) Recuperar algo de energía (si quieres que funcione igual que en escapa)
+        recuperar_energia_jugador(jugador, config)
+
+        # 5) Si el jugador se queda sin energía, pierde
+        if jugador.esta_sin_energia():
+            os.system("cls")
+            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+            print("\n💀 Te has quedado sin energía. Has perdido en modo CAZADOR. 💀")
+            puntaje = 0
+            print(f"\nTu puntaje: {puntaje}")
+            break
+
+        # 6) Redibujar el mapa
+        os.system("cls")
+        mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+        print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
+        print(f"Movimientos: {movimientos_jugador}")
+        print(f"Enemigos restantes: {total_enemigos - atrapados}")
 
 class RegistroJugadores:
     """

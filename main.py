@@ -141,6 +141,54 @@ class Muro(Casilla): # Muro: nadie puede pasar.
         return False
 
 
+class Jugador:
+    """
+    Representa al jugador dentro del mapa.
+    Guarda su posición, energía y puntaje.
+    """
+
+    def __init__(self, nombre, fila_inicial, columna_inicial, config_dificultad):
+        # Identidad
+        self.nombre = nombre
+
+        # Posición en el mapa
+        self.fila = fila_inicial
+        self.columna = columna_inicial
+
+        # Energía (según la dificultad)
+        self.energia_max = config_dificultad.energia_max
+        self.energia_actual = config_dificultad.energia_max
+
+        # Otros atributos útiles
+        self.puntaje = 0
+        self.vivo = True
+
+    def gastar_energia(self, cantidad):
+        """
+        Resta energía al jugador.
+        Si la energía baja de 0, se deja en 0.
+        """
+        self.energia_actual -= cantidad
+        if self.energia_actual < 0:
+            self.energia_actual = 0
+
+    def recuperar_energia(self, cantidad):
+        """
+        Suma energía al jugador.
+        No puede pasar de energia_max.
+        """
+        self.energia_actual += cantidad
+        if self.energia_actual > self.energia_max:
+            self.energia_actual = self.energia_max
+
+    def esta_sin_energia(self):
+        """
+        Devuelve True si el jugador no tiene energía.
+        """
+        return self.energia_actual <= 0
+
+
+
 def crear_casilla_aleatoria(): # Crea una casilla aleatoria de cualquiera de los 4 tipos.
 
     tipo_random = random.randint(0, 3)
@@ -227,19 +275,95 @@ def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
 
     return mapa, inicio, salida
 
+
+
+
+def mover_jugador(jugador, direccion, mapa, config_dificultad, correr=False):
+    """
+    Intenta mover al jugador en una dirección.
+    - jugador: objeto Jugador
+    - direccion: string ("arriba", "abajo", "izquierda", "derecha")
+    - mapa: matriz de casillas
+    - config_dificultad: para consumo de energía
+    - correr: si True, gasta más energía
+
+    Devuelve:
+    - True si se movió
+    - False si no se movió (por muro, túnel, etc.)
+    """
+
+    # Movimientos posibles
+    if direccion == "arriba":
+        nueva_fila = jugador.fila - 1
+        nueva_col = jugador.columna
+    elif direccion == "abajo":
+        nueva_fila = jugador.fila + 1
+        nueva_col = jugador.columna
+    elif direccion == "izquierda":
+        nueva_fila = jugador.fila
+        nueva_col = jugador.columna - 1
+    elif direccion == "derecha":
+        nueva_fila = jugador.fila
+        nueva_col = jugador.columna + 1
+    else:
+        return False  # dirección no válida
+
+    # Evitar moverse fuera del mapa
+    filas = len(mapa)
+    columnas = len(mapa[0])
+
+    if nueva_fila < 0 or nueva_fila >= filas:
+        return False
+    if nueva_col < 0 or nueva_col >= columnas:
+        return False
+
+    # Revisar si puede pisar la casilla
+    casilla_destino = mapa[nueva_fila][nueva_col]
+    if not casilla_destino.puede_pisar_jugador():
+        return False  # No puede entrar (muro, liana, etc.)
+
+    # Consumo de energía
+    if correr:
+        jugador.gastar_energia(config_dificultad.consumo_correr)
+    else:
+        jugador.gastar_energia(1)  # caminar consume poco
+
+    if jugador.esta_sin_energia():
+        print("⚠️ El jugador no tiene energía suficiente para moverse.")
+        return False
+
+    # Si todo es válido → actualizar posición
+    jugador.fila = nueva_fila
+    jugador.columna = nueva_col
+    return True
+
+
+def recuperar_energia_jugador(jugador, config_dificultad):
+    jugador.recuperar_energia(config_dificultad.recuperacion_pasiva)
+
+
+
 # ======= REGISTRO DE JUGADORES ============
 
-def mostrar_mapa_consola(mapa, inicio, salida):
+def mostrar_mapa_consola(mapa, jugador, salida):
+    """
+    Muestra el mapa en consola.
+    - 🤠 = jugador (posición actual)
+    - 🚪 = salida
+    - El resto según el tipo de casilla
+    """
     for f in range(len(mapa)):
         linea = ""
         for c in range(len(mapa[0])):
 
-            if (f, c) == inicio:
-                linea += "🤠"   # jugador
+            # Jugador
+            if f == jugador.fila and c == jugador.columna:
+                linea += "🤠"
                 continue
 
+            # Salida
             if (f, c) == salida:
-                linea += "🚪"   # salida
+                linea += "🚪"
                 continue
 
             celda = mapa[f][c]
@@ -254,7 +378,7 @@ def mostrar_mapa_consola(mapa, inicio, salida):
                 linea += "░░"
             else:
                 linea += "??"
-    
+
         print(linea)
 
 
@@ -264,14 +388,49 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
     print(f"Jugador: {nombre_jugador}")
     print(f"Dificultad: {config.nombre}")
 
-    # Generar mapa
     mapa, inicio, salida = generar_mapa()
+    fila_ini, col_ini = inicio
 
-    # Mostrar el mapa en la terminal 💙
-    print("\nMapa generado (terminal):\n")
-    mostrar_mapa_consola(mapa, inicio, salida)
+    jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
 
-    print("\nTODO: implementar lógica del modo ESCAPA.\n")
+    # Primer dibujo del mapa
+    os.system("cls")  # limpia la consola en Windows
+    mostrar_mapa_consola(mapa, jugador, salida)
+    print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
+    print("\nUse comandos: w/a/s/d para moverse, x para salir.")
+
+    while True:
+        tecla = input("\nMovimiento: ").lower()
+
+        if tecla == "x":
+            break
+
+        se_movio = False
+
+        if tecla == "w":
+            se_movio = mover_jugador(jugador, "arriba", mapa, config)
+        elif tecla == "s":
+            se_movio = mover_jugador(jugador, "abajo", mapa, config)
+        elif tecla == "a":
+            se_movio = mover_jugador(jugador, "izquierda", mapa, config)
+        elif tecla == "d":
+            se_movio = mover_jugador(jugador, "derecha", mapa, config)
+        else:
+            print("Tecla no válida. Use w/a/s/d o x para salir.")
+
+        # Si se movió, mostramos el mapa actualizado
+        if se_movio:
+            os.system("cls")  # limpia la consola
+            mostrar_mapa_consola(mapa, jugador, salida)
+            print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
+            print(f"Posición: ({jugador.fila}, {jugador.columna})")
+
+            # ¿Llegó a la salida?
+            if jugador.fila == salida[0] and jugador.columna == salida[1]:
+                print("\n🎉 ¡Has llegado a la salida del laberinto! 🎉")
+                break
+        else:
+            print("No te puedes mover en esa dirección.")
 
 
 def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
@@ -280,14 +439,15 @@ def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
     print(f"Jugador: {nombre_jugador}")
     print(f"Dificultad: {config.nombre}")
 
-    # Generar mapa
     mapa, inicio, salida = generar_mapa()
+    fila_ini, col_ini = inicio
+    jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
 
-    # Mostrar el mapa en la terminal 💙
     print("\nMapa generado (terminal):\n")
-    mostrar_mapa_consola(mapa, inicio, salida)
+    mostrar_mapa_consola(mapa, jugador, salida)
 
     print("\nTODO: implementar lógica del modo CAZADOR.\n")
+
 
 class RegistroJugadores:
     """

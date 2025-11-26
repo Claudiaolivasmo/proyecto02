@@ -17,7 +17,8 @@
             "historial_cazador": [
                 500,
                 800,
-                750
+                750,
+                200
             ]
         },
         {
@@ -43,6 +44,24 @@
             "historial_cazador": [
                 3000,
                 2000,
+                200
+            ]
+        },
+        {
+            "nombre": "Grevin",
+            "mejor_escapa": 100,
+            "mejor_cazador": 0,
+            "historial_escapa": [
+                100
+            ],
+            "historial_cazador": []
+        },
+        {
+            "nombre": "Alex",
+            "mejor_escapa": 0,
+            "mejor_cazador": 200,
+            "historial_escapa": [],
+            "historial_cazador": [
                 200
             ]
         }

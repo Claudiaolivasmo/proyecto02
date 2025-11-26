@@ -592,7 +592,7 @@ def mostrar_mapa_consola(mapa, jugador, salida, enemigos):
 
 # ======= REGISTRO DE JUGADORES ============
 
-def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
+def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
     config = CONFIGS_DIFICULTAD[clave_dificultad]
     print("\n=== MODO ESCAPA ===")
     print(f"Jugador: {nombre_jugador}")
@@ -647,7 +647,7 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
             print("\n🎉 ¡Has llegado a la salida del laberinto! 🎉")
             puntaje = calcular_puntaje(movimientos_jugador, config)
             print(f"\nTu puntaje: {puntaje}")
-            # Aquí luego puedes llamar a registrar_partida(...)
+            registro.registrar_partida(nombre_jugador, puntaje, MODO_ESCAPA)
             break
 
         # Mover enemigos según la "velocidad" de la dificultad
@@ -662,6 +662,7 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
             print("\n💀 Un cazador te ha atrapado. Has perdido. 💀")
             puntaje = 0  # puedes ajustar si quieres otra lógica
             print(f"\nTu puntaje: {puntaje}")
+            registro.registrar_partida(nombre_jugador, puntaje, MODO_ESCAPA)
             break
 
         # Redibujar mapa
@@ -671,7 +672,7 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad):
         print(f"Movimientos: {movimientos_jugador}")
 
 
-def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
+def iniciar_modo_cazador(nombre_jugador, clave_dificultad, registro):
     config = CONFIGS_DIFICULTAD[clave_dificultad]
     print("\n=== MODO CAZADOR ===")
     print(f"Jugador: {nombre_jugador}")
@@ -736,7 +737,7 @@ def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
             print("\n🎉 ¡Has atrapado a todos los enemigos! 🎉")
             puntaje = calcular_puntaje(movimientos_jugador, config)
             print(f"\nTu puntaje en modo CAZADOR: {puntaje}")
-            # Más adelante: registrar_partida(nombre_jugador, puntaje) para este modo
+            registro.registrar_partida(nombre_jugador, puntaje, MODO_CAZADOR)
             break
 
         # 3) Mover enemigos huyendo, según velocidad configurada
@@ -753,6 +754,7 @@ def iniciar_modo_cazador(nombre_jugador, clave_dificultad):
             print("\n💀 Te has quedado sin energía. Has perdido en modo CAZADOR. 💀")
             puntaje = 0
             print(f"\nTu puntaje: {puntaje}")
+            registro.registrar_partida(nombre_jugador, puntaje, MODO_CAZADOR)
             break
 
         # 6) Redibujar el mapa
@@ -799,15 +801,18 @@ class RegistroJugadores:
     def crear_jugador_si_no_existe(self, nombre):
         """
         Si el jugador NO existe en el diccionario, lo crea con valores iniciales.
+        Separamos los mejores puntajes por modo de juego.
         """
         if nombre not in self.jugadores:
             self.jugadores[nombre] = {
                 "partidas_jugadas": 0,
-                "mejor_puntaje": 0
+                "mejor_puntaje_escapa": 0,
+                "mejor_puntaje_cazador": 0
             }
             self.guardar_en_archivo()
 
-    def registrar_partida(self, nombre, puntaje):
+
+    def registrar_partida(self, nombre, puntaje,modo):
         """
         Actualiza las estadísticas del jugador:
         - suma 1 partida jugada
@@ -817,9 +822,13 @@ class RegistroJugadores:
 
         jugador = self.jugadores[nombre]
         jugador["partidas_jugadas"] += 1
-
-        if puntaje > jugador["mejor_puntaje"]:
-            jugador["mejor_puntaje"] = puntaje
+        
+        if modo == MODO_ESCAPA:
+            if puntaje > jugador["mejor_puntaje_escapa"]:
+                jugador["mejor_puntaje_escapa"] = puntaje
+        elif modo == MODO_CAZADOR:
+            if puntaje > jugador["mejor_puntaje_cazador"]:
+                jugador["mejor_puntaje_cazador"] = puntaje
 
         self.guardar_en_archivo()
 
@@ -828,6 +837,30 @@ class RegistroJugadores:
 
     def obtener_todos_los_jugadores(self): # Devuelve una lista con todos los nombres de jugadores registrados.
         return list(self.jugadores.keys())
+    
+    def obtener_top5_por_modo(self, modo):
+        """
+        Devuelve una lista de tuplas (nombre, puntaje) ordenada de mayor a menor,
+        con máximo 5 jugadores, según el modo.
+        """
+        jugadores_puntajes = []
+
+        for nombre, datos in self.jugadores.items():
+            if modo == MODO_ESCAPA:
+                puntaje = datos.get("mejor_puntaje_escapa", 0)
+            elif modo == MODO_CAZADOR:
+                puntaje = datos.get("mejor_puntaje_cazador", 0)
+            else:
+                puntaje = 0
+
+            jugadores_puntajes.append((nombre, puntaje))
+
+        # Ordenar de mayor a menor puntaje
+        jugadores_puntajes.sort(key=lambda x: x[1], reverse=True)
+
+        # Devolver solo los primeros 5
+        return jugadores_puntajes[:5]
+
 
 
 # ============= MENÚS Y MAIN ===============
@@ -891,8 +924,38 @@ def mostrar_historial(registro): #     Muestra todos los jugadores y sus estadí
 
     for nombre in nombres:
         datos = registro.obtener_datos_jugador(nombre)
-        print(f"- {nombre}: {datos['partidas_jugadas']} partidas, "
-              f"mejor puntaje = {datos['mejor_puntaje']}")
+        print(
+            f"- {nombre}: {datos['partidas_jugadas']} partidas, "
+            f"mejor ESCAPA = {datos['mejor_puntaje_escapa']}, "
+            f"mejor CAZADOR = {datos['mejor_puntaje_cazador']}"
+        )
+
+def mostrar_top5_escapa(registro):
+    print("\n=== TOP 5 - Modo ESCAPA ===")
+    top = registro.obtener_top5_por_modo(MODO_ESCAPA)
+
+    if len(top) == 0:
+        print("Aún no hay puntajes registrados en este modo.")
+        return
+
+    posicion = 1
+    for nombre, puntaje in top:
+        print(f"{posicion}. {nombre}: {puntaje} puntos")
+        posicion += 1
+
+
+def mostrar_top5_cazador(registro):
+    print("\n=== TOP 5 - Modo CAZADOR ===")
+    top = registro.obtener_top5_por_modo(MODO_CAZADOR)
+
+    if len(top) == 0:
+        print("Aún no hay puntajes registrados en este modo.")
+        return
+
+    posicion = 1
+    for nombre, puntaje in top:
+        print(f"{posicion}. {nombre}: {puntaje} puntos")
+        posicion += 1
 
 
 def main():
@@ -910,7 +973,9 @@ def main():
         print("============== MENÚ PRINCIPAL ==============")
         print("1. Jugar")
         print("2. Ver historial de jugadores")
-        print("3. Salir")
+        print("3. Ver Top 5 ESCAPA")
+        print("4. Ver Top 5 CAZADOR")
+        print("5. Salir")
 
         opcion = input("Seleccione una opción: ").strip()
 
@@ -920,19 +985,26 @@ def main():
             modo = menu_modo()
 
             if modo == MODO_ESCAPA:
-                iniciar_modo_escapa(nombre_jugador, clave_dificultad)
+                iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro)
             elif modo == MODO_CAZADOR:
-                iniciar_modo_cazador(nombre_jugador, clave_dificultad)
+                iniciar_modo_cazador(nombre_jugador, clave_dificultad, registro)
 
         elif opcion == "2":
             mostrar_historial(registro)
 
         elif opcion == "3":
+            mostrar_top5_escapa(registro)
+
+        elif opcion == "4":
+            mostrar_top5_cazador(registro)
+
+        elif opcion == "5":
             print("\nGracias por jugar. ¡Hasta luego!\n")
             break
 
         else:
             print("Opción inválida. Intente de nuevo.\n")
+
 
 
 if __name__ == "__main__":

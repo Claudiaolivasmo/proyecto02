@@ -351,23 +351,36 @@ class Game:
     def draw_puntajes(self):
         """Dibujar pantalla de puntajes"""
         title = FONT_LARGE.render("Top 5 - Puntajes", True, COLORS['TEXT'])
-        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 30))
+        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 20))
 
         # Recargar datos
         self.data_manager.reload()
 
-        # Top 5 Escape
+        # Top 5 Escape - LADO IZQUIERDO
         escape_label = FONT_MEDIUM.render("=== MODO ESCAPA ===", True, (100, 200, 255))
-        self.screen.blit(escape_label, (WIDTH // 2 - escape_label.get_width() // 2, 100))
+        self.screen.blit(escape_label, (50, 90))
 
         top_escape = self.data_manager.get_top5("escape")
         for i, score in enumerate(top_escape):
-            score_text = FONT_SMALL.render(f"{i + 1}. {score['nombre']}: {score['score']} pts", True, COLORS['TEXT'])
-            self.screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 150 + i * 30))
+            score_text = FONT_SMALL.render(f"{i + 1}. {score['nombre']}: {score['score']}", True, COLORS['TEXT'])
+            self.screen.blit(score_text, (50, 140 + i * 28))
 
         if not top_escape:
-            no_scores = FONT_SMALL.render("Sin puntuaciones aún", True, COLORS['ERROR'])
-            self.screen.blit(no_scores, (WIDTH // 2 - no_scores.get_width() // 2, 150))
+            no_scores = FONT_SMALL.render("Sin puntuaciones", True, COLORS['ERROR'])
+            self.screen.blit(no_scores, (50, 140))
+
+        # Top 5 Cazador - LADO DERECHO
+        cazador_label = FONT_MEDIUM.render("=== MODO CAZADOR ===", True, (255, 150, 100))
+        self.screen.blit(cazador_label, (WIDTH // 2 + 50, 90))
+
+        top_cazador = self.data_manager.get_top5("cazador")
+        for i, score in enumerate(top_cazador):
+            score_text = FONT_SMALL.render(f"{i + 1}. {score['nombre']}: {score['score']}", True, COLORS['TEXT'])
+            self.screen.blit(score_text, (WIDTH // 2 + 50, 140 + i * 28))
+
+        if not top_cazador:
+            no_scores = FONT_SMALL.render("Sin puntuaciones", True, COLORS['ERROR'])
+            self.screen.blit(no_scores, (WIDTH // 2 + 50, 140))
 
         # Botón Atrás
         self.draw_button(WIDTH // 2 - 150, 500, 300, 60, "← Atrás")

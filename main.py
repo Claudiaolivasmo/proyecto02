@@ -770,7 +770,8 @@ class RegistroJugadores:
 
     Cada jugador tiene:
     - partidas_jugadas
-    - mejor_puntaje
+    - mejor_puntaje_escapa
+    - mejor_puntaje_cazador
     """
 
     def __init__(self, ruta_archivo=RUTA_ARCHIVO_JUGADORES):
@@ -811,42 +812,43 @@ class RegistroJugadores:
             }
             self.guardar_en_archivo()
 
-def registrar_partida(self, nombre, puntaje, modo):
-    """
-    Actualiza las estadísticas del jugador:
-    - suma 1 partida jugada
-    - actualiza mejor puntaje si el nuevo es mayor
-    """
-    self.crear_jugador_si_no_existe(nombre)
+    def registrar_partida(self, nombre, puntaje, modo):
+        """
+        Actualiza las estadísticas del jugador:
+        - suma 1 partida jugada
+        - actualiza mejor puntaje si el nuevo es mayor
+        """
+        self.crear_jugador_si_no_existe(nombre)
 
-    jugador = self.jugadores[nombre]
+        jugador = self.jugadores[nombre]
 
-    # 🔹 Asegurar que existan todas las llaves, por si el JSON es viejo
-    if "partidas_jugadas" not in jugador:
-        jugador["partidas_jugadas"] = 0
-    if "mejor_puntaje_escapa" not in jugador:
-        jugador["mejor_puntaje_escapa"] = 0
-    if "mejor_puntaje_cazador" not in jugador:
-        jugador["mejor_puntaje_cazador"] = 0
+        # Asegurar que existan todas las llaves, por si el JSON es viejo
+        if "partidas_jugadas" not in jugador:
+            jugador["partidas_jugadas"] = 0
+        if "mejor_puntaje_escapa" not in jugador:
+            jugador["mejor_puntaje_escapa"] = 0
+        if "mejor_puntaje_cazador" not in jugador:
+            jugador["mejor_puntaje_cazador"] = 0
 
-    jugador["partidas_jugadas"] += 1
+        jugador["partidas_jugadas"] += 1
 
-    if modo == MODO_ESCAPA:
-        if puntaje > jugador["mejor_puntaje_escapa"]:
-            jugador["mejor_puntaje_escapa"] = puntaje
-    elif modo == MODO_CAZADOR:
-        if puntaje > jugador["mejor_puntaje_cazador"]:
-            jugador["mejor_puntaje_cazador"] = puntaje
+        if modo == MODO_ESCAPA:
+            if puntaje > jugador["mejor_puntaje_escapa"]:
+                jugador["mejor_puntaje_escapa"] = puntaje
+        elif modo == MODO_CAZADOR:
+            if puntaje > jugador["mejor_puntaje_cazador"]:
+                jugador["mejor_puntaje_cazador"] = puntaje
 
-    self.guardar_en_archivo()
+        self.guardar_en_archivo()
 
-
-    def obtener_datos_jugador(self, nombre): # Devuelve el diccionario del jugador o None si no existe.
+    def obtener_datos_jugador(self, nombre):
+        """Devuelve el diccionario del jugador o None si no existe."""
         return self.jugadores.get(nombre)
 
-    def obtener_todos_los_jugadores(self): # Devuelve una lista con todos los nombres de jugadores registrados.
+    def obtener_todos_los_jugadores(self):
+        """Devuelve una lista con todos los nombres de jugadores registrados."""
         return list(self.jugadores.keys())
-    
+
     def obtener_top5_por_modo(self, modo):
         """
         Devuelve una lista de tuplas (nombre, puntaje) ordenada de mayor a menor,
@@ -869,6 +871,7 @@ def registrar_partida(self, nombre, puntaje, modo):
 
         # Devolver solo los primeros 5
         return jugadores_puntajes[:5]
+
 
 
 

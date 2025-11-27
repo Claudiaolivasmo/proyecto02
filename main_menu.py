@@ -1,6 +1,8 @@
 import pygame
 import os
 from data.data_manager import DataManager
+from map import ModoEscape
+from main import DIFICULTAD_FACIL, DIFICULTAD_MEDIA, DIFICULTAD_DIFICIL
 
 pygame.init()
 
@@ -123,13 +125,22 @@ class Game:
             btn_atras = pygame.Rect(WIDTH // 2 - 150, 450, 300, 60)
 
             if btn_facil.collidepoint(mouse_pos):
-                self.play_game(modo, "facil")
+                if modo == "escape":
+                    self.jugar_modo_escape(DIFICULTAD_FACIL)
+                else:
+                    self.play_game(modo, "facil")
                 self.current_screen = "menu_principal"
             elif btn_medio.collidepoint(mouse_pos):
-                self.play_game(modo, "medio")
+                if modo == "escape":
+                    self.jugar_modo_escape(DIFICULTAD_MEDIA)
+                else:
+                    self.play_game(modo, "medio")
                 self.current_screen = "menu_principal"
             elif btn_dificil.collidepoint(mouse_pos):
-                self.play_game(modo, "dificil")
+                if modo == "escape":
+                    self.jugar_modo_escape(DIFICULTAD_DIFICIL)
+                else:
+                    self.play_game(modo, "dificil")
                 self.current_screen = "menu_principal"
             elif btn_atras.collidepoint(mouse_pos):
                 self.current_screen = "menu_principal"
@@ -199,8 +210,36 @@ class Game:
             self.error_msg = "Jugador no encontrado. Regístrate primero."
             self.error_timer = pygame.time.get_ticks()
 
+    def jugar_modo_escape(self, dificultad):
+        """Iniciar el modo escape con el mapa real"""
+        modo_escape = ModoEscape(self.screen, self.player_name, dificultad)
+        # Cargar las imágenes (cuando las tengas configuradas)
+        modo_escape.cargar_imagenes()
+        
+        jugando = True
+        while jugando:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    jugando = False
+                else:
+                    jugando = modo_escape.manejar_eventos(event)
+                    
+                    # Si el juego terminó y presionó ESC
+                    if modo_escape.juego_terminado and event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            # Guardar puntaje
+                            puntaje = modo_escape.obtener_resultado()
+                            if puntaje > 0:
+                                self.data_manager.add_score(self.player_name, puntaje, "escape")
+                            jugando = False
+            
+            modo_escape.dibujar()
+            pygame.display.flip()
+            self.clock.tick(60)
+    
     def play_game(self, modo, dificultad):
-        """Simular la partida y pedir puntuación"""
+        """Simular la partida y pedir puntuación (para modo cazador)"""
         # Mostrar pantalla de juego (placeholder)
         playing = True
         score = 0

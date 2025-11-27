@@ -1,6 +1,13 @@
 {
   "Claudia": {
-    "partidas_jugadas": 0,
-    "mejor_puntaje": 0
+    "partidas_jugadas": 3,
+    "mejor_puntaje": 0,
+    "mejor_puntaje_escapa": 418,
+    "mejor_puntaje_cazador": 0
+  },
+  "c": {
+    "partidas_jugadas": 1,
+    "mejor_puntaje_escapa": 0,
+    "mejor_puntaje_cazador": 0
   }
 }

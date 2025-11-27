@@ -34,8 +34,8 @@ DIFICULTAD_DIFICIL = "dificil"
 
 # Mapa
 
-ANCHO_MAPA = 15  # columnas
-ALTO_MAPA  = 10  # filas
+ANCHO_MAPA = 21 # Aumentado para un mejor laberinto
+ALTO_MAPA = 17 # Aumentado para un mejor laberinto (ambos impares)
 
 # ====== BOMBAS (modo Escapa) ======
 
@@ -231,12 +231,6 @@ class Bomba:
 
 
 def mover_enemigo_hacia_jugador(enemigo, jugador, mapa):
-    """
-    Mueve un enemigo un paso hacia el jugador, si es posible.
-    Usa una lógica simple: intenta reducir la distancia en fila/columna.
-    """
-    mejor_fila = enemigo.fila
-    mejor_col = enemigo.columna
 
     # Distancia actual
     dist_f = jugador.fila - enemigo.fila
@@ -345,32 +339,26 @@ def mover_enemigos_huyendo(enemigos, jugador, mapa):
 
 
 
-def crear_enemigos_iniciales(mapa, cantidad, jugador, salida):
-    """
-    Crea 'cantidad' enemigos en posiciones aleatorias del mapa.
-    No los coloca encima del jugador ni de la salida.
-    Solo en casillas donde puede pisar enemigo.
-    """
+def crear_enemigos_en_camino(camino_principal, cantidad, jugador, salida):
     enemigos = []
 
-    filas = len(mapa)
-    columnas = len(mapa[0])
-
-    while len(enemigos) < cantidad:
-        fila = random.randint(0, filas - 1)
-        col = random.randint(0, columnas - 1)
-
-        # Evitar jugador y salida
-        if fila == jugador.fila and col == jugador.columna:
+    # Celdas candidatas del camino donde SÍ podemos poner enemigos
+    candidatos = []
+    for (f, c) in camino_principal:
+        if (f, c) == (jugador.fila, jugador.columna):
             continue
-        if (fila, col) == salida:
+        if (f, c) == salida:
             continue
+        candidatos.append((f, c))
 
-        casilla = mapa[fila][col]
-        if not casilla.puede_pisar_enemigo():
-            continue
+    # Por si hay menos celdas que enemigos
+    cantidad_real = min(cantidad, len(candidatos))
 
-        enemigos.append(Enemigo(fila, col))
+    # Elegimos posiciones al azar dentro del camino
+    posiciones_elegidas = random.sample(candidatos, cantidad_real)
+
+    for (f, c) in posiciones_elegidas:
+        enemigos.append(Enemigo(f, c))
 
     return enemigos
 
@@ -383,93 +371,125 @@ def mover_enemigos(enemigos, jugador, mapa):
         if enemigo.vivo:
             mover_enemigo_hacia_jugador(enemigo, jugador, mapa)
 
-def crear_casilla_aleatoria(): # Crea una casilla aleatoria de cualquiera de los 4 tipos.
-
-    tipo_random = random.randint(0, 3)
-
-    if tipo_random == CAMINO:
-        return Camino()
-    elif tipo_random == LIANA:
-        return Liana()
-    elif tipo_random == TUNEL:
-        return Tunel()
-    else:
-        return Muro()
 
 def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
-    """
-    Genera un mapa con al menos un camino válido desde la columna 0 hasta la última.
-    Devuelve:
-    - mapa: matriz de casillas
-    - inicio: posición del jugador
-    - salida: posición final
-    """
 
+    # Aseguramos que el ancho y alto sean impares para el algoritmo de laberinto
+    if alto % 2 == 0:
+        alto += 1
+    if ancho % 2 == 0:
+        ancho += 1
 
     # 1. Crear matriz llena de MUROS
-
     mapa = []
-
     for f in range(alto):
         fila_nueva = []
         for c in range(ancho):
-            fila_nueva.append(Muro())  # todo empieza como muro
+            fila_nueva.append(Muro())
         mapa.append(fila_nueva)
 
+    # Punto de inicio del laberinto para el algoritmo (siempre fila impar, col = 1)
+    start_f = random.randrange(1, alto, 2)
+    start_c = 1
 
-    # 2. Elegir la fila donde inicia el jugador
+    # Entrada real del jugador (columna 0)
+    fila_entrada_jugador = start_f
+    columna_entrada_jugador = 0
+    mapa[fila_entrada_jugador][columna_entrada_jugador] = Camino()  # entrada
 
-    fila_jugador = random.randint(0, alto - 1)
-    columna_jugador = 0
+    inicio = (fila_entrada_jugador, columna_entrada_jugador)
 
-    inicio = (fila_jugador, columna_jugador)
+    # Guardamos el camino principal
+    camino_principal = [(fila_entrada_jugador, columna_entrada_jugador)]
 
-    mapa[fila_jugador][columna_jugador] = Camino()  # primer camino
+    # Backtracking para abrir celdas tipo Camino en el interior
+    stack = [(start_f, start_c)]
+    mapa[start_f][start_c] = Camino()
+    camino_principal.append((start_f, start_c))
 
+    direcciones = [(-2, 0), (2, 0), (0, -2), (0, 2)]
 
-    # 3. Crear el camino garantizado hasta la última columna
+    while stack:
+        current_f, current_c = stack[-1]
 
-    fila_actual = fila_jugador
-    columna_actual = columna_jugador
+        unvisited_neighbors = []
+        for df, dc in direcciones:
+            neighbor_f = current_f + df
+            neighbor_c = current_c + dc
+            if (
+                0 <= neighbor_f < alto
+                and 0 <= neighbor_c < ancho
+                and isinstance(mapa[neighbor_f][neighbor_c], Muro)
+            ):
+                unvisited_neighbors.append((neighbor_f, neighbor_c, df, dc))
 
-    while columna_actual < ancho - 1:
+        if unvisited_neighbors:
+            next_f, next_c, df, dc = random.choice(unvisited_neighbors)
 
+            # "Romper" el muro intermedio
+            wall_f = current_f + df // 2
+            wall_c = current_c + dc // 2
+            mapa[wall_f][wall_c] = Camino()
+            mapa[next_f][next_c] = Camino()
 
-        opciones = ["derecha"]
+            camino_principal.append((wall_f, wall_c))
+            camino_principal.append((next_f, next_c))
 
-        if fila_actual > 0:
-            opciones.append("arriba")
-        if fila_actual < alto - 1:
-            opciones.append("abajo")
+            stack.append((next_f, next_c))
+        else:
+            stack.pop()
 
-        movimiento = random.choice(opciones)
+    # 2. Asegurar la salida en la última columna
+    fila_salida = random.randrange(1, alto, 2)
+    columna_salida = ancho - 1
+    mapa[fila_salida][columna_salida] = Camino()
 
-        if movimiento == "derecha":
-            columna_actual += 1
-        elif movimiento == "arriba":
-            fila_actual -= 1
-        elif movimiento == "abajo":
-            fila_actual += 1
+    # Asegurar conexión con el laberinto interno
+    if isinstance(mapa[fila_salida][columna_salida - 1], Muro):
+        mapa[fila_salida][columna_salida - 1] = Camino()
 
-        # marcar el camino
-        mapa[fila_actual][columna_actual] = Camino()
+    salida = (fila_salida, columna_salida)
+    camino_principal.append(salida)
 
-    salida = (fila_actual, columna_actual)
+    # ------------------------------------------------------------------
+    # 3. Decorar el laberinto con Lianas y Túneles
+    # ------------------------------------------------------------------
 
+    # Probabilidades (ajusta al gusto)
+    PROB_TUNEL_EN_CAMINO = 0.10   # 10% de caminos normales serán túneles
+    PROB_LIANA_EN_CAMINO = 0.06   # 6% serán lianas
+    PROB_TUNEL_EN_MURO   = 0.04   # 4% de muros se abren como túnel
+    PROB_LIANA_EN_MURO   = 0.03   # 3% de muros se abren como liana
 
-    # 4. Rellenar todo lo que NO es camino con casillas aleatorias
+    # Para no romper el camino garantizado entrada→salida
+    camino_principal_set = set(camino_principal)
 
-    for f in range(alto):
-        for c in range(ancho):
+    for f in range(1, alto - 1):
+        for c in range(1, ancho - 1):
 
-            if isinstance(mapa[f][c], Camino):
+            # No tocamos las casillas del camino principal
+            if (f, c) in camino_principal_set:
                 continue
 
-            mapa[f][c] = crear_casilla_aleatoria()
+            celda = mapa[f][c]
 
-    return mapa, inicio, salida
+            # 1) Decorar caminos existentes
+            if isinstance(celda, Camino):
+                r = random.random()
+                if r < PROB_TUNEL_EN_CAMINO:
+                    mapa[f][c] = Tunel()   # solo jugador
+                elif r < PROB_TUNEL_EN_CAMINO + PROB_LIANA_EN_CAMINO:
+                    mapa[f][c] = Liana()   # solo enemigos
 
+            # 2) Abrir algunos muros como pasajes especiales
+            elif isinstance(celda, Muro):
+                r = random.random()
+                if r < PROB_TUNEL_EN_MURO:
+                    mapa[f][c] = Tunel()
+                elif r < PROB_TUNEL_EN_MURO + PROB_LIANA_EN_MURO:
+                    mapa[f][c] = Liana()
 
+    return mapa, inicio, salida, camino_principal
 
 
 def mover_jugador(jugador, direccion, mapa, config_dificultad, correr=False):
@@ -718,67 +738,71 @@ def calcular_puntaje(movimientos, config_dificultad):
 
     return puntaje
 
+
 def mostrar_mapa_consola(mapa, jugador, salida, enemigos, bombas=None):
     """
-    Muestra el mapa en consola.
-    - 🤠 = jugador
-    - 👹 = enemigo
-    - 🚪 = salida
-    - 💣 = bomba
+    Dibuja el mapa en consola:
+    - 🤠 jugador
+    - 👹 enemigos vivos
+    - 🚪 salida
+    - 💣 bombas sin explotar
+    - Terreno: MURO, CAMINO, LIANA, TUNEL
     """
     if bombas is None:
         bombas = []
 
+    filas = len(mapa)
+    columnas = len(mapa[0])
 
-        for f in range(len(mapa)):
-            linea = ""
-            for c in range(len(mapa[0])):
+    for f in range(filas):
+        linea = ""
+        for c in range(columnas):
 
-                # Jugador
-                if f == jugador.fila and c == jugador.columna:
-                    linea += "🤠"
-                    continue
+            # 1) Jugador
+            if f == jugador.fila and c == jugador.columna:
+                linea += "🤠"
+                continue
 
-                # Enemigo (si hay alguno en esta casilla)
-                hay_enemigo = False
-                for enemigo in enemigos:
-                    if enemigo.vivo and enemigo.fila == f and enemigo.columna == c:
-                        linea += "👹"
-                        hay_enemigo = True
-                        break
-                if hay_enemigo:
-                    continue
+            # 2) Enemigos
+            hay_enemigo = False
+            for enemigo in enemigos:
+                if enemigo.vivo and enemigo.fila == f and enemigo.columna == c:
+                    linea += "👹"
+                    hay_enemigo = True
+                    break
+            if hay_enemigo:
+                continue
 
-                # Salida
-                if (f, c) == salida:
-                    linea += "🚪"
-                    continue
+            # 3) Salida
+            if (f, c) == salida:
+                linea += "🚪"
+                continue
 
-                # Bomba (si hay)
-                hay_bomba = False
-                for bomba in bombas:
-                    if (not bomba.explotada) and bomba.fila == f and bomba.columna == c:
-                        linea += "💣"
-                        hay_bomba = True
-                        break
-                if hay_bomba:
-                    continue
+            # 4) Bombas
+            hay_bomba = False
+            for bomba in bombas:
+                if (not bomba.explotada) and bomba.fila == f and bomba.columna == c:
+                    linea += "💣"
+                    hay_bomba = True
+                    break
+            if hay_bomba:
+                continue
 
-                # Terreno
-                celda = mapa[f][c]
+            # 5) Terreno
+            celda = mapa[f][c]
+            if isinstance(celda, Camino):
+                linea += "  "       # 2 espacios para que coincida con "██"
+            elif isinstance(celda, Muro):
+                linea += "██"
+            elif isinstance(celda, Liana):
+                linea += "🌿"
+            elif isinstance(celda, Tunel):
+                linea += "░░"
+            else:
+                linea += "??"
 
-                if isinstance(celda, Camino):
-                    linea += "  "      # espacio
-                elif isinstance(celda, Muro):
-                    linea += "██"
-                elif isinstance(celda, Liana):
-                    linea += "🌿"
-                elif isinstance(celda, Tunel):
-                    linea += "░░"
-                else:
-                    linea += "??"
+        print(linea)
 
-            print(linea)
 
 # ======= REGISTRO DE JUGADORES ============
 
@@ -788,18 +812,19 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
     print(f"Jugador: {nombre_jugador}")
     print(f"Dificultad: {config.nombre}")
 
-    mapa, inicio, salida = generar_mapa()
+    mapa, inicio, salida, camino_principal = generar_mapa()
     fila_ini, col_ini = inicio
 
     jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
 
-    # Crear enemigos iniciales
-    enemigos = crear_enemigos_iniciales(mapa, config.cant_enemigos, jugador, salida)
+    # Crear enemigos iniciales SOLO en el camino principal
+    enemigos = crear_enemigos_en_camino(camino_principal, config.cant_enemigos, jugador, salida)
+
 
     movimientos_jugador = 0  # cuenta de movimientos
-    turnos = 0               # para velocidad de enemigos
+    turnos = 0 # para velocidad de enemigos
 
-        # Bombas y respawn de enemigos
+    # Bombas y respawn de enemigos
     bombas = []  # lista de objetos Bomba
     enemigos_por_respawnear = []  # lista de dicts {"enemigo": obj, "turno_muerte": int}
     ultimo_turno_bomba = -COOLDOWN_BOMBA_TURNOS  # para poder poner una al inicio si quieres
@@ -893,13 +918,13 @@ def iniciar_modo_cazador(nombre_jugador, clave_dificultad, registro):
     print(f"Jugador: {nombre_jugador}")
     print(f"Dificultad: {config.nombre}")
 
-    # Generar mapa y jugador
-    mapa, inicio, salida = generar_mapa()
+    mapa, inicio, salida, camino_principal = generar_mapa()
     fila_ini, col_ini = inicio
     jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
 
-    # Crear las "presas" iniciales (usamos la misma función de enemigos)
-    enemigos = crear_enemigos_iniciales(mapa, config.cant_enemigos, jugador, salida)
+    # Crear las "presas" iniciales SOLO en el camino principal
+    enemigos = crear_enemigos_en_camino(camino_principal, config.cant_enemigos, jugador, salida)
+
 
     movimientos_jugador = 0
     turnos = 0

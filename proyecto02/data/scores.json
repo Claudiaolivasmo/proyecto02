@@ -1,0 +1,18 @@
+{
+    "usuarios": [
+        {
+            "nombre": "Mainor",
+            "mejor_escapa": 0,
+            "mejor_cazador": 0,
+            "historial_escapa": [],
+            "historial_cazador": []
+        },
+        {
+            "nombre": "Claudia",
+            "mejor_escapa": 0,
+            "mejor_cazador": 0,
+            "historial_escapa": [],
+            "historial_cazador": []
+        }
+    ]
+}

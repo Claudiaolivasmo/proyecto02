@@ -99,7 +99,6 @@ class ModoEscape:
         self.imagen_liana = None
         self.imagen_tunel = None
         self.imagen_muro = None
-        self.imagen_enemigo = None
         self.imagen_salida = None
         
         # Sprites del jugador con animación
@@ -113,6 +112,17 @@ class ModoEscape:
         self.jugador_frame = 0  # Frame actual de animación
         self.animation_speed = 8  # Velocidad de animación
         self.animation_counter = 0
+        
+        # Sprites de enemigos (cazadores) con animación
+        self.enemigo_sprites = {
+            'down': [],
+            'up': [],
+            'left': [],
+            'right': []
+        }
+        # Guardar la dirección de cada enemigo (índice del enemigo -> dirección)
+        self.enemigo_direcciones = {}
+        self.enemigo_frames = {}
         
         # Sistema de movimiento suave
         self.moviendo = False
@@ -187,7 +197,50 @@ class ModoEscape:
             print(f"⚠️ Error al cargar sprites del jugador: {e}")
             print("Se usará un círculo en su lugar.")
         
-        # TODO: Agregar imágenes para enemigo y salida si las tienes
+        # Cargar sprites de enemigos (cazadores)
+        try:
+            import os
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            cazador_dir = os.path.join(base_dir, "data", "cazador")
+            
+            # Cargar sprites de cada dirección (3 frames por dirección)
+            for i in range(3):
+                # Abajo
+                sprite = pygame.image.load(os.path.join(cazador_dir, f"w_down_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['down'].append(sprite)
+                
+                # Arriba - manejo especial para el archivo con nombre diferente
+                if i == 2:
+                    # El tercer frame tiene un nombre diferente: w_ups_2.png
+                    sprite = pygame.image.load(os.path.join(cazador_dir, "w_ups_2.png"))
+                else:
+                    sprite = pygame.image.load(os.path.join(cazador_dir, f"w_up_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['up'].append(sprite)
+                
+                # Izquierda
+                sprite = pygame.image.load(os.path.join(cazador_dir, f"w_left_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['left'].append(sprite)
+                
+                # Derecha
+                sprite = pygame.image.load(os.path.join(cazador_dir, f"w_right_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['right'].append(sprite)
+            
+            # Inicializar dirección y frame para cada enemigo
+            for i, enemigo in enumerate(self.enemigos):
+                self.enemigo_direcciones[i] = 'down'
+                self.enemigo_frames[i] = 0
+            
+            print("✓ Sprites de cazadores cargados correctamente")
+            
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"⚠️ Error al cargar sprites de cazadores: {e}")
+            print("Se usarán círculos rojos en su lugar.")
+        
+        # TODO: Agregar imagen para salida si la tienes
     
     def dibujar_celda(self, fila, col, casilla):
         """
@@ -286,14 +339,22 @@ class ModoEscape:
             self.screen.blit(texto_salida, (salida_x + 5, salida_y + 5))
         
         # === DIBUJAR ENEMIGOS ===
-        for enemigo in self.enemigos:
+        for idx, enemigo in enumerate(self.enemigos):
             if enemigo.vivo:  # Solo dibujar enemigos que siguen vivos
                 enemigo_x = self.offset_x + enemigo.columna * self.CELL_SIZE
                 enemigo_y = self.offset_y + enemigo.fila * self.CELL_SIZE
                 
-                if self.imagen_enemigo:
-                    self.screen.blit(self.imagen_enemigo, (enemigo_x, enemigo_y))
+                # Si hay sprites de cazadores, usarlos
+                if self.enemigo_sprites['down']:
+                    # Obtener dirección y frame de este enemigo
+                    direccion = self.enemigo_direcciones.get(idx, 'down')
+                    frame = self.enemigo_frames.get(idx, 0)
+                    
+                    # Dibujar sprite animado del cazador
+                    sprite_actual = self.enemigo_sprites[direccion][frame % 3]
+                    self.screen.blit(sprite_actual, (enemigo_x, enemigo_y))
                 else:
+                    # Fallback: círculo rojo
                     pygame.draw.circle(self.screen, (255, 0, 0),
                                      (enemigo_x + self.CELL_SIZE // 2, 
                                       enemigo_y + self.CELL_SIZE // 2),
@@ -416,7 +477,29 @@ class ModoEscape:
                     
                     # Mover enemigos cada cierto número de turnos
                     if self.turnos % self.config.vel_enemigos == 0:
+                        # Guardar posiciones anteriores para detectar dirección
+                        posiciones_anteriores = [(e.fila, e.columna) for e in self.enemigos]
+                        
                         mover_enemigos(self.enemigos, self.jugador, self.mapa)
+                        
+                        # Actualizar dirección y frame de cada enemigo
+                        for idx, enemigo in enumerate(self.enemigos):
+                            if enemigo.vivo:
+                                fila_ant, col_ant = posiciones_anteriores[idx]
+                                
+                                # Detectar hacia dónde se movió
+                                if enemigo.columna > col_ant:
+                                    self.enemigo_direcciones[idx] = 'right'
+                                elif enemigo.columna < col_ant:
+                                    self.enemigo_direcciones[idx] = 'left'
+                                elif enemigo.fila > fila_ant:
+                                    self.enemigo_direcciones[idx] = 'down'
+                                elif enemigo.fila < fila_ant:
+                                    self.enemigo_direcciones[idx] = 'up'
+                                
+                                # Avanzar frame de animación si se movió
+                                if (enemigo.fila, enemigo.columna) != (fila_ant, col_ant):
+                                    self.enemigo_frames[idx] = (self.enemigo_frames.get(idx, 0) + 1) % 3
                     
                     # ¿Chocó con un enemigo? -> PIERDE
                     if hay_colision_con_enemigo(self.jugador, self.enemigos):

@@ -37,6 +37,16 @@ DIFICULTAD_DIFICIL = "dificil"
 ANCHO_MAPA = 15  # columnas
 ALTO_MAPA  = 10  # filas
 
+# ====== BOMBAS (modo Escapa) ======
+
+MAX_BOMBAS_ACTIVAS = 3           # máx. bombas colocadas al mismo tiempo
+COOLDOWN_BOMBA_TURNOS = 5        # turnos entre colocar una y otra
+DEMORA_EXPLOSION_BOMBA = 3       # turnos que tarda en explotar sola
+RANGO_BOMBA = 1                  # radio de explosión (en casillas, estilo cruz sencilla)
+RESPAWN_ENEMIGO_TURNOS = 10      # turnos para que el enemigo reviva
+BONO_BOMBA = 50                  # puntos por enemigo eliminado con bomba
+
+
 
 
 class ConfigDificultad:
@@ -189,6 +199,7 @@ class Jugador:
 
 
 class Enemigo:
+    
     """
     Representa a un cazador dentro del mapa.
     Solo puede pisar casillas permitidas para enemigo.
@@ -198,6 +209,26 @@ class Enemigo:
         self.fila = fila_inicial
         self.columna = columna_inicial
         self.vivo = True
+
+
+
+class Bomba:
+    """
+    Bomba colocada por el jugador:
+    - fila, columna: posición en el mapa
+    - turno_colocada: en qué turno se puso
+    - rango: cuántas casillas alcanza al explotar
+    - explotada: ya explotó o no
+    """
+    def __init__(self, fila, columna, turno_colocada, rango=RANGO_BOMBA):
+        self.fila = fila
+        self.columna = columna
+        self.turno_colocada = turno_colocada
+        self.rango = rango
+        self.explotada = False
+
+
+
 
 def mover_enemigo_hacia_jugador(enemigo, jugador, mapa):
     """
@@ -513,6 +544,150 @@ def hay_colision_con_enemigo(jugador, enemigos):
             return True
     return False
 
+def colocar_bomba(bombas, jugador, mapa, turnos, ultimo_turno_bomba):
+    """
+    Intenta colocar una bomba en la posición actual del jugador.
+    Reglas:
+    - Máx. MAX_BOMBAS_ACTIVAS activas.
+    - Cooldown de COOLDOWN_BOMBA_TURNOS turnos.
+    Devuelve (se_coloco, nuevo_ultimo_turno_bomba).
+    """
+    # Límite de bombas
+    if len([b for b in bombas if not b.explotada]) >= MAX_BOMBAS_ACTIVAS:
+        print(f"⚠️ Ya tienes {MAX_BOMBAS_ACTIVAS} bombas activas.")
+        return False, ultimo_turno_bomba
+
+    # Cooldown
+    if turnos - ultimo_turno_bomba < COOLDOWN_BOMBA_TURNOS:
+        faltan = COOLDOWN_BOMBA_TURNOS - (turnos - ultimo_turno_bomba)
+        print(f"⚠️ Debes esperar {faltan} turnos más para colocar otra bomba.")
+        return False, ultimo_turno_bomba
+
+    f = jugador.fila
+    c = jugador.columna
+
+    # No permitir doble bomba en la misma casilla
+    for b in bombas:
+        if not b.explotada and b.fila == f and b.columna == c:
+            print("⚠️ Ya hay una bomba en esta casilla.")
+            return False, ultimo_turno_bomba
+
+    # La casilla ya es válida porque el jugador está parado ahí,
+    # así que simplemente creamos la bomba.
+    nueva_bomba = Bomba(f, c, turnos)
+    bombas.append(nueva_bomba)
+    print("💣 Has colocado una bomba.")
+    return True, turnos
+
+
+def explotar_bomba(bomba, enemigos, jugador, mapa, salida,
+                   turnos, enemigos_por_respawnear):
+    """
+    Hace explotar una bomba:
+    - Mata a enemigos en un rango en cruz.
+    - Suma BONO_BOMBA por cada enemigo eliminado.
+    - Agenda respawn para más adelante.
+    """
+    bomba.explotada = True
+    print("💥 ¡Bomba explotó!")
+
+    filas = len(mapa)
+    columnas = len(mapa[0])
+
+    # Celda central (donde está la bomba)
+    posiciones_afectadas = [(bomba.fila, bomba.columna)]
+
+    # Estilo cruz (como tu ejemplo de Pygame)
+    direcciones = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    for df, dc in direcciones:
+        for i in range(1, bomba.rango + 1):
+            nf = bomba.fila + df * i
+            nc = bomba.columna + dc * i
+
+            if nf < 0 or nf >= filas or nc < 0 or nc >= columnas:
+                break  # fuera del mapa
+
+            casilla = mapa[nf][nc]
+            # Si es muro, la explosión no sigue más en esa dirección
+            if isinstance(casilla, Muro):
+                break
+
+            posiciones_afectadas.append((nf, nc))
+
+    # Matar enemigos que estén en posiciones afectadas
+    for enemigo in enemigos:
+        if not enemigo.vivo:
+            continue
+        if (enemigo.fila, enemigo.columna) in posiciones_afectadas:
+            enemigo.vivo = False
+            jugador.puntaje += BONO_BOMBA
+            print(f"👹 Enemigo eliminado por bomba. +{BONO_BOMBA} puntos.")
+            enemigos_por_respawnear.append({
+                "enemigo": enemigo,
+                "turno_muerte": turnos
+            })
+
+
+def procesar_bombas_y_respawn(bombas, enemigos, jugador, mapa, salida,
+                              turnos, enemigos_por_respawnear):
+    """
+    - Si un enemigo se para encima de una bomba NO explotada → explota inmediato.
+    - Si pasa el tiempo DEMORA_EXPLOSION_BOMBA → explota sola.
+    - Gestiona respawn de enemigos después de RESPAWN_ENEMIGO_TURNOS.
+    """
+
+    # 1) Explosión inmediata si un enemigo pisa la bomba
+    for bomba in bombas:
+        if bomba.explotada:
+            continue
+        for enemigo in enemigos:
+            if enemigo.vivo and enemigo.fila == bomba.fila and enemigo.columna == bomba.columna:
+                explotar_bomba(bomba, enemigos, jugador, mapa, salida,
+                               turnos, enemigos_por_respawnear)
+                break  # ya explotó, no revisamos otros enemigos para esta bomba
+
+    # 2) Explosión por tiempo (bomba "programada")
+    for bomba in bombas:
+        if bomba.explotada:
+            continue
+        if turnos - bomba.turno_colocada >= DEMORA_EXPLOSION_BOMBA:
+            explotar_bomba(bomba, enemigos, jugador, mapa, salida,
+                           turnos, enemigos_por_respawnear)
+
+    # 3) Limpiar bombas explotadas (ya no se dibujan)
+    bombas[:] = [b for b in bombas if not b.explotada]
+
+    # 4) Respawn de enemigos
+    restantes = []
+    for info in enemigos_por_respawnear:
+        enemigo = info["enemigo"]
+        turno_muerte = info["turno_muerte"]
+
+        if turnos - turno_muerte >= RESPAWN_ENEMIGO_TURNOS:
+            # Respawnearlo en una casilla válida para enemigo
+            filas = len(mapa)
+            columnas = len(mapa[0])
+            while True:
+                f = random.randint(0, filas - 1)
+                c = random.randint(0, columnas - 1)
+                if (f, c) == (jugador.fila, jugador.columna):
+                    continue
+                if (f, c) == salida:
+                    continue
+                casilla = mapa[f][c]
+                if not casilla.puede_pisar_enemigo():
+                    continue
+                enemigo.fila = f
+                enemigo.columna = c
+                enemigo.vivo = True
+                print("👹 Un enemigo ha reaparecido en el mapa.")
+                break
+        else:
+            restantes.append(info)
+
+    enemigos_por_respawnear[:] = restantes
+
+
 def calcular_puntaje(movimientos, config_dificultad):
     """
     Calcula el puntaje:
@@ -543,52 +718,67 @@ def calcular_puntaje(movimientos, config_dificultad):
 
     return puntaje
 
-def mostrar_mapa_consola(mapa, jugador, salida, enemigos):
+def mostrar_mapa_consola(mapa, jugador, salida, enemigos, bombas=None):
     """
     Muestra el mapa en consola.
     - 🤠 = jugador
     - 👹 = enemigo
     - 🚪 = salida
+    - 💣 = bomba
     """
-    for f in range(len(mapa)):
-        linea = ""
-        for c in range(len(mapa[0])):
+    if bombas is None:
+        bombas = []
 
-            # Jugador
-            if f == jugador.fila and c == jugador.columna:
-                linea += "🤠"
-                continue
 
-            # Enemigo (si hay alguno en esta casilla)
-            hay_enemigo = False
-            for enemigo in enemigos:
-                if enemigo.vivo and enemigo.fila == f and enemigo.columna == c:
-                    linea += "👹"
-                    hay_enemigo = True
-                    break
-            if hay_enemigo:
-                continue
+        for f in range(len(mapa)):
+            linea = ""
+            for c in range(len(mapa[0])):
 
-            # Salida
-            if (f, c) == salida:
-                linea += "🚪"
-                continue
+                # Jugador
+                if f == jugador.fila and c == jugador.columna:
+                    linea += "🤠"
+                    continue
 
-            celda = mapa[f][c]
+                # Enemigo (si hay alguno en esta casilla)
+                hay_enemigo = False
+                for enemigo in enemigos:
+                    if enemigo.vivo and enemigo.fila == f and enemigo.columna == c:
+                        linea += "👹"
+                        hay_enemigo = True
+                        break
+                if hay_enemigo:
+                    continue
 
-            if isinstance(celda, Camino):
-                linea += "  "      # espacio
-            elif isinstance(celda, Muro):
-                linea += "██"
-            elif isinstance(celda, Liana):
-                linea += "🌿"
-            elif isinstance(celda, Tunel):
-                linea += "░░"
-            else:
-                linea += "??"
+                # Salida
+                if (f, c) == salida:
+                    linea += "🚪"
+                    continue
 
-        print(linea)
+                # Bomba (si hay)
+                hay_bomba = False
+                for bomba in bombas:
+                    if (not bomba.explotada) and bomba.fila == f and bomba.columna == c:
+                        linea += "💣"
+                        hay_bomba = True
+                        break
+                if hay_bomba:
+                    continue
 
+                # Terreno
+                celda = mapa[f][c]
+
+                if isinstance(celda, Camino):
+                    linea += "  "      # espacio
+                elif isinstance(celda, Muro):
+                    linea += "██"
+                elif isinstance(celda, Liana):
+                    linea += "🌿"
+                elif isinstance(celda, Tunel):
+                    linea += "░░"
+                else:
+                    linea += "??"
+
+            print(linea)
 
 # ======= REGISTRO DE JUGADORES ============
 
@@ -609,10 +799,17 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
     movimientos_jugador = 0  # cuenta de movimientos
     turnos = 0               # para velocidad de enemigos
 
+        # Bombas y respawn de enemigos
+    bombas = []  # lista de objetos Bomba
+    enemigos_por_respawnear = []  # lista de dicts {"enemigo": obj, "turno_muerte": int}
+    ultimo_turno_bomba = -COOLDOWN_BOMBA_TURNOS  # para poder poner una al inicio si quieres
+
+
     os.system("cls")  # limpiar pantalla en Windows
-    mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+    mostrar_mapa_consola(mapa, jugador, salida, enemigos, bombas)
     print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
-    print("\nUse comandos: w/a/s/d para moverse, x para salir.")
+    print("\nUse comandos: w/a/s/d para moverse, b para bomba, x para salir.")
+
 
     while True:
         tecla = input("\nMovimiento: ").lower()
@@ -631,14 +828,24 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
             se_movio = mover_jugador(jugador, "izquierda", mapa, config)
         elif tecla == "d":
             se_movio = mover_jugador(jugador, "derecha", mapa, config)
+        elif tecla == "b":
+            # Colocar bomba en la casilla actual
+            se_coloco, ultimo_turno_bomba = colocar_bomba(
+                bombas, jugador, mapa, turnos, ultimo_turno_bomba
+            )
+            # Poner bomba NO cuenta como movimiento para puntaje ni avance de turnos
+            # Si quisieras que sí cuente como "tiempo", podríamos incrementar turnos aquí.
+            continue
         else:
-            print("Tecla no válida. Use w/a/s/d o x para salir.")
+            print("Tecla no válida. Use w/a/s/d, b para bomba o x para salir.")
+            continue  # no se mueve ni coloca bomba
 
         if not se_movio:
             continue  # no hay turno si no se movió
 
         movimientos_jugador += 1
         turnos += 1
+
 
         # ¿Llegó a la salida antes que lo atrapen?
         if jugador.fila == salida[0] and jugador.columna == salida[1]:
@@ -655,6 +862,13 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
         if turnos % config.vel_enemigos == 0:
             mover_enemigos(enemigos, jugador, mapa)
 
+        # Procesar bombas (explosión por tiempo o si las pisan) y respawn de enemigos
+        procesar_bombas_y_respawn(
+            bombas, enemigos, jugador, mapa, salida,
+            turnos, enemigos_por_respawnear
+        )
+
+
         # ¿Algún enemigo lo atrapó?
         if hay_colision_con_enemigo(jugador, enemigos):
             os.system("cls")
@@ -665,11 +879,12 @@ def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
             registro.registrar_partida(nombre_jugador, puntaje, MODO_ESCAPA)
             break
 
-        # Redibujar mapa
         os.system("cls")
-        mostrar_mapa_consola(mapa, jugador, salida, enemigos)
+        mostrar_mapa_consola(mapa, jugador, salida, enemigos, bombas)
         print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
         print(f"Movimientos: {movimientos_jugador}")
+        print(f"Bombas activas: {len(bombas)}")
+
 
 
 def iniciar_modo_cazador(nombre_jugador, clave_dificultad, registro):

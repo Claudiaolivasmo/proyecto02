@@ -1,15 +1,18 @@
 import pygame
 import sys
+
+# Importar toda la lógica del juego desde main.py
+# Aquí NO se crea lógica nueva, solo se usa lo que ya existe
 from main import (
-    generar_mapa, 
-    Jugador, 
-    crear_enemigos_iniciales,
-    mover_jugador,
-    mover_enemigos,
-    hay_colision_con_enemigo,
-    calcular_puntaje,
-    recuperar_energia_jugador,
-    CONFIGS_DIFICULTAD,
+    generar_mapa,  # Función que genera la matriz del mapa
+    Jugador,  # Clase del jugador con posición y energía
+    crear_enemigos_iniciales,  # Crea los enemigos en posiciones válidas
+    mover_jugador,  # Función que valida y ejecuta movimientos
+    mover_enemigos,  # Mueve a los enemigos hacia el jugador
+    hay_colision_con_enemigo,  # Detecta si el jugador chocó con enemigo
+    calcular_puntaje,  # Calcula puntos según movimientos y dificultad
+    recuperar_energia_jugador,  # Recupera energía pasiva del jugador
+    CONFIGS_DIFICULTAD,  # Configuraciones de cada dificultad
     DIFICULTAD_FACIL,
     ANCHO_MAPA,
     ALTO_MAPA,
@@ -17,7 +20,7 @@ from main import (
     LIANA,
     TUNEL,
     MURO,
-    Camino,
+    Camino,  # Clases de terreno
     Liana,
     Tunel,
     Muro
@@ -26,24 +29,31 @@ from main import (
 
 class ModoEscape:
     """
-    Clase para el modo Escape con representación gráfica en Pygame.
-    Genera el mapa y prepara la estructura para que adjuntes las imágenes.
+    Interfaz gráfica para el modo Escape.
+    
+    Esta clase NO hace lógica de jugabilidad, solo:
+    - Dibuja el mapa en pantalla
+    - Carga y muestra sprites
+    - Captura teclas del usuario
+    - Llama a las funciones de main.py para la lógica real
     """
     
     def __init__(self, screen, jugador_nombre, dificultad=DIFICULTAD_FACIL):
+        # Pantalla de pygame donde se dibujará todo
         self.screen = screen
         self.jugador_nombre = jugador_nombre
         self.dificultad = dificultad
         self.config = CONFIGS_DIFICULTAD[dificultad]
         
-        # Generar mapa usando la función de main.py
+        # LLAMADA A MAIN.PY: generar el mapa (matriz de terrenos)
+        # Devuelve: mapa, posición inicial, posición de salida
         self.mapa, self.inicio, self.salida = generar_mapa(ANCHO_MAPA, ALTO_MAPA)
         
-        # Crear jugador
+        # LLAMADA A MAIN.PY: crear el jugador en la posición inicial
         fila_ini, col_ini = self.inicio
         self.jugador = Jugador(jugador_nombre, fila_ini, col_ini, self.config)
         
-        # Crear enemigos
+        # LLAMADA A MAIN.PY: crear enemigos en posiciones aleatorias válidas
         self.enemigos = crear_enemigos_iniciales(
             self.mapa, 
             self.config.cant_enemigos, 
@@ -51,21 +61,21 @@ class ModoEscape:
             self.salida
         )
         
-        # Contadores
+        # Contadores para estadísticas
         self.movimientos = 0
         self.turnos = 0
         
-        # Dimensiones de la pantalla
+        # Configuración de pantalla
         self.WIDTH = 800
         self.HEIGHT = 600
         
-        # Calcular tamaño de celda
+        # Calcular el tamaño de cada celda para que el mapa quepa en pantalla
         self.CELL_SIZE = min(
             (self.WIDTH - 100) // ANCHO_MAPA,
             (self.HEIGHT - 150) // ALTO_MAPA
         )
         
-        # Offset para centrar el mapa
+        # Offset para centrar el mapa en la pantalla
         self.offset_x = (self.WIDTH - (ANCHO_MAPA * self.CELL_SIZE)) // 2
         self.offset_y = 100
         
@@ -74,43 +84,37 @@ class ModoEscape:
         self.mensaje_final = ""
         self.puntaje_final = 0
         
-        # Fuentes
+        # Fuentes para textos
         self.font_medium = pygame.font.Font(None, 30)
         self.font_small = pygame.font.Font(None, 24)
         
-        # Colores
-        self.COLOR_BG = (20, 20, 40)
-        self.COLOR_TEXT = (255, 255, 255)
-        self.COLOR_SUCCESS = (100, 255, 100)
-        self.COLOR_DANGER = (255, 100, 100)
+        # Colores usados en la interfaz
+        self.COLOR_BG = (20, 20, 40)  # Fondo oscuro azulado
+        self.COLOR_TEXT = (255, 255, 255)  # Texto blanco
+        self.COLOR_SUCCESS = (100, 255, 100)  # Verde para mensajes de éxito
+        self.COLOR_DANGER = (255, 100, 100)  # Rojo para peligro
         
-        # ============================================
-        # AQUÍ VAN TUS IMÁGENES
-        # ============================================
-        # Cuando tengas las imágenes, reemplaza None con:
-        # pygame.image.load("ruta/a/tu/imagen.png")
-        # y ajusta el tamaño con:
-        # pygame.transform.scale(imagen, (self.CELL_SIZE, self.CELL_SIZE))
-        
-        self.imagen_camino = None  # Imagen para CAMINO
-        self.imagen_liana = None    # Imagen para LIANA
-        self.imagen_tunel = None    # Imagen para TÚNEL
-        self.imagen_muro = None     # Imagen para MURO
-        self.imagen_jugador = None  # Imagen para el jugador
-        self.imagen_enemigo = None  # Imagen para enemigos
-        self.imagen_salida = None   # Imagen para la salida
+        # Imágenes del terreno (se cargan en cargar_imagenes())
+        self.imagen_camino = None
+        self.imagen_liana = None
+        self.imagen_tunel = None
+        self.imagen_muro = None
+        self.imagen_enemigo = None
+        self.imagen_salida = None
         
     def cargar_imagenes(self):
         """
-        Método para cargar todas las imágenes del terreno.
+        Carga todas las imágenes del terreno desde la carpeta data/terreno.
+        Las escala al tamaño de cada celda para que se vean bien.
+        Si falla, se usan colores sólidos como respaldo.
         """
         try:
-            # Obtener la ruta del directorio donde está este archivo
+            # Obtener la ruta absoluta donde está este archivo
             import os
             base_dir = os.path.dirname(os.path.abspath(__file__))
             terreno_dir = os.path.join(base_dir, "data", "terreno")
             
-            # Cargar imágenes del mapa desde data/terreno
+            # Cargar cada imagen y escalarla
             self.imagen_camino = pygame.image.load(os.path.join(terreno_dir, "camino.png"))
             self.imagen_camino = pygame.transform.scale(self.imagen_camino, (self.CELL_SIZE, self.CELL_SIZE))
             
@@ -129,18 +133,21 @@ class ModoEscape:
             print(f"⚠️ Error al cargar imágenes del terreno: {e}")
             print("Se usarán colores en su lugar.")
         
-        # Jugador, enemigo y salida se mantienen como círculos/rectángulos por ahora
-        # Puedes agregar sus imágenes más adelante si las tienes
+        # TODO: Agregar imágenes para enemigo y salida si las tienes
     
     def dibujar_celda(self, fila, col, casilla):
         """
-        Dibuja una celda del mapa según su tipo.
-        Si no hay imagen, dibuja un rectángulo de color.
+        Dibuja una celda individual del mapa.
+        
+        Revisa el tipo de casilla (Camino, Liana, Tunel, Muro) y:
+        - Si hay imagen cargada -> dibuja la imagen
+        - Si no hay imagen -> dibuja un rectángulo de color
         """
+        # Calcular la posición en píxeles de esta celda
         x = self.offset_x + col * self.CELL_SIZE
         y = self.offset_y + fila * self.CELL_SIZE
         
-        # Determinar qué dibujar según el tipo de casilla
+        # Dibujar según el tipo de terreno
         if isinstance(casilla, Camino):
             if self.imagen_camino:
                 self.screen.blit(self.imagen_camino, (x, y))
@@ -169,14 +176,22 @@ class ModoEscape:
         pygame.draw.rect(self.screen, (80, 80, 80), (x, y, self.CELL_SIZE, self.CELL_SIZE), 1)
     
     def dibujar_mapa(self):
-        """Dibuja todo el mapa con todas las casillas"""
+        """
+        Dibuja el mapa completo recorriendo todas las celdas.
+        Llama a dibujar_celda() para cada posición.
+        """
         for fila in range(len(self.mapa)):
             for col in range(len(self.mapa[0])):
                 self.dibujar_celda(fila, col, self.mapa[fila][col])
     
     def dibujar_entidades(self):
-        """Dibuja al jugador, enemigos y la salida"""
-        # Dibujar salida
+        """
+        Dibuja todas las entidades del juego:
+        - La salida (meta/puerta)
+        - Los enemigos vivos
+        - El jugador
+        """
+        # === DIBUJAR LA SALIDA ===
         salida_x = self.offset_x + self.salida[1] * self.CELL_SIZE
         salida_y = self.offset_y + self.salida[0] * self.CELL_SIZE
         
@@ -188,9 +203,9 @@ class ModoEscape:
             texto_salida = self.font_small.render("🚪", True, self.COLOR_TEXT)
             self.screen.blit(texto_salida, (salida_x + 5, salida_y + 5))
         
-        # Dibujar enemigos
+        # === DIBUJAR ENEMIGOS ===
         for enemigo in self.enemigos:
-            if enemigo.vivo:
+            if enemigo.vivo:  # Solo dibujar enemigos que siguen vivos
                 enemigo_x = self.offset_x + enemigo.columna * self.CELL_SIZE
                 enemigo_y = self.offset_y + enemigo.fila * self.CELL_SIZE
                 
@@ -202,7 +217,7 @@ class ModoEscape:
                                       enemigo_y + self.CELL_SIZE // 2),
                                      self.CELL_SIZE // 3)
         
-        # Dibujar jugador
+        # === DIBUJAR JUGADOR ===
         jugador_x = self.offset_x + self.jugador.columna * self.CELL_SIZE
         jugador_y = self.offset_y + self.jugador.fila * self.CELL_SIZE
         
@@ -215,7 +230,14 @@ class ModoEscape:
                              self.CELL_SIZE // 3)
     
     def dibujar_ui(self):
-        """Dibuja la información del jugador (energía, movimientos, etc.)"""
+        """
+        Dibuja la interfaz de usuario (HUD):
+        - Título del modo y dificultad
+        - Nombre del jugador
+        - Energía actual (verde si >30, rojo si <=30)
+        - Contador de movimientos
+        - Instrucciones de control
+        """
         # Título
         titulo = self.font_medium.render(f"Modo Escape - {self.config.nombre.upper()}", 
                                         True, self.COLOR_TEXT)
@@ -245,12 +267,24 @@ class ModoEscape:
         self.screen.blit(inst_text, (self.WIDTH - 250, 70))
     
     def manejar_eventos(self, evento):
-        """Maneja los eventos de teclado para mover al jugador"""
+        """
+        Captura las teclas presionadas y procesa el movimiento del jugador.
+        
+        IMPORTANTE: Este método NO valida el movimiento, solo:
+        1. Detecta qué tecla presionó el usuario
+        2. Llama a mover_jugador() de main.py (que tiene la lógica real)
+        3. Si el movimiento fue exitoso, actualiza contadores y revisa victoria/derrota
+        
+        Returns:
+            False si debe salir del juego, True si debe continuar
+        """
         if self.juego_terminado:
             return False
         
         if evento.type == pygame.KEYDOWN:
             direccion = None
+            
+            # Detectar qué tecla presionó
             
             if evento.key == pygame.K_w or evento.key == pygame.K_UP:
                 direccion = "arriba"
@@ -264,72 +298,90 @@ class ModoEscape:
                 return False  # Salir del modo
             
             if direccion:
-                # Intentar mover al jugador
+                # LLAMADA A MAIN.PY: intentar mover al jugador
+                # Esta función valida si el movimiento es posible y actualiza la posición
                 se_movio = mover_jugador(self.jugador, direccion, self.mapa, self.config, correr=False)
                 
                 if se_movio:
+                    # El movimiento fue exitoso, actualizar contadores
                     self.movimientos += 1
                     self.turnos += 1
                     
-                    # Verificar si llegó a la salida
+                    # ¿Llegó a la salida? -> GANA
                     if self.jugador.fila == self.salida[0] and self.jugador.columna == self.salida[1]:
                         self.puntaje_final = calcular_puntaje(self.movimientos, self.config)
                         self.mensaje_final = "¡GANASTE! Has llegado a la salida"
                         self.juego_terminado = True
                         return True
                     
-                    # Mover enemigos según velocidad
+                    # Mover enemigos cada cierto número de turnos
                     if self.turnos % self.config.vel_enemigos == 0:
                         mover_enemigos(self.enemigos, self.jugador, self.mapa)
                     
-                    # Verificar colisión con enemigos
+                    # ¿Chocó con un enemigo? -> PIERDE
                     if hay_colision_con_enemigo(self.jugador, self.enemigos):
                         self.puntaje_final = 0
                         self.mensaje_final = "PERDISTE: Un cazador te atrapó"
                         self.juego_terminado = True
                         return True
                     
-                    # Recuperar energía pasiva
+                    # LLAMADA A MAIN.PY: recuperar energía pasiva
                     recuperar_energia_jugador(self.jugador, self.config)
         
         return True  # Continuar jugando
     
     def dibujar(self):
-        """Dibuja toda la escena del juego"""
+        """
+        Dibuja toda la escena del juego.
+        
+        Si el juego está activo:
+            - Dibuja el mapa
+            - Dibuja entidades (jugador, enemigos, salida)
+            - Dibuja UI (energía, movimientos, etc.)
+        
+        Si el juego terminó:
+            - Muestra pantalla de victoria/derrota
+            - Muestra el puntaje
+            - Muestra instrucción para volver al menú
+        """
         self.screen.fill(self.COLOR_BG)
         
         if not self.juego_terminado:
+            # Juego activo: dibujar todo normalmente
             self.dibujar_mapa()
             self.dibujar_entidades()
             self.dibujar_ui()
         else:
-            # Pantalla de fin de juego
+            # Juego terminado: mostrar pantalla final
             self.dibujar_mapa()
             self.dibujar_entidades()
             
-            # Overlay semi-transparente
+            # Overlay oscuro semi-transparente
             overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
             overlay.set_alpha(180)
             overlay.fill((0, 0, 0))
             self.screen.blit(overlay, (0, 0))
             
-            # Mensaje final
+            # Mensaje de victoria o derrota
             font_grande = pygame.font.Font(None, 60)
             color = self.COLOR_SUCCESS if "GANASTE" in self.mensaje_final else self.COLOR_DANGER
             mensaje = font_grande.render(self.mensaje_final, True, color)
             self.screen.blit(mensaje, (self.WIDTH // 2 - mensaje.get_width() // 2, self.HEIGHT // 2 - 50))
             
-            # Puntaje
+            # Mostrar puntaje final
             puntaje_text = self.font_medium.render(f"Puntaje: {self.puntaje_final}", 
                                                    True, self.COLOR_TEXT)
             self.screen.blit(puntaje_text, 
                            (self.WIDTH // 2 - puntaje_text.get_width() // 2, self.HEIGHT // 2 + 20))
             
-            # Instrucción
+            # Instrucción para salir
             inst = self.font_small.render("Presiona ESC para volver al menú", 
                                          True, (200, 200, 200))
             self.screen.blit(inst, (self.WIDTH // 2 - inst.get_width() // 2, self.HEIGHT // 2 + 80))
     
     def obtener_resultado(self):
-        """Devuelve el puntaje final para guardar en el registro"""
+        """
+        Devuelve el puntaje final del jugador.
+        Lo usa main_menu.py para guardarlo en el sistema de puntajes.
+        """
         return self.puntaje_final

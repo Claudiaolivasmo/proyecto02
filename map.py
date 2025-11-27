@@ -102,6 +102,26 @@ class ModoEscape:
         self.imagen_enemigo = None
         self.imagen_salida = None
         
+        # Sprites del jugador con animación
+        self.jugador_sprites = {
+            'down': [],
+            'up': [],
+            'left': [],
+            'right': []
+        }
+        self.jugador_direccion = 'down'  # Dirección actual
+        self.jugador_frame = 0  # Frame actual de animación
+        self.animation_speed = 8  # Velocidad de animación
+        self.animation_counter = 0
+        
+        # Sistema de movimiento suave
+        self.moviendo = False
+        self.pos_pixel_x = col_ini * self.CELL_SIZE  # Posición en píxeles
+        self.pos_pixel_y = fila_ini * self.CELL_SIZE
+        self.target_x = self.pos_pixel_x  # Posición objetivo
+        self.target_y = self.pos_pixel_y
+        self.velocidad_movimiento = 8  # Píxeles por frame
+        
     def cargar_imagenes(self):
         """
         Carga todas las imágenes del terreno desde la carpeta data/terreno.
@@ -118,7 +138,7 @@ class ModoEscape:
             self.imagen_camino = pygame.image.load(os.path.join(terreno_dir, "camino.png"))
             self.imagen_camino = pygame.transform.scale(self.imagen_camino, (self.CELL_SIZE, self.CELL_SIZE))
             
-            self.imagen_liana = pygame.image.load(os.path.join(terreno_dir, "liana3.png"))
+            self.imagen_liana = pygame.image.load(os.path.join(terreno_dir, "lianas_on_wall.png"))
             self.imagen_liana = pygame.transform.scale(self.imagen_liana, (self.CELL_SIZE, self.CELL_SIZE))
             
             self.imagen_tunel = pygame.image.load(os.path.join(terreno_dir, "tunel3.png"))
@@ -132,6 +152,40 @@ class ModoEscape:
         except (pygame.error, FileNotFoundError) as e:
             print(f"⚠️ Error al cargar imágenes del terreno: {e}")
             print("Se usarán colores en su lugar.")
+        
+        # Cargar sprites del jugador
+        try:
+            import os
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            jugador_dir = os.path.join(base_dir, "data", "jugador")
+            
+            # Cargar sprites de cada dirección (4 frames por dirección)
+            for i in range(4):
+                # Abajo
+                sprite = pygame.image.load(os.path.join(jugador_dir, f"walk_down_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.jugador_sprites['down'].append(sprite)
+                
+                # Arriba
+                sprite = pygame.image.load(os.path.join(jugador_dir, f"walk_up_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.jugador_sprites['up'].append(sprite)
+                
+                # Izquierda
+                sprite = pygame.image.load(os.path.join(jugador_dir, f"walk_left_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.jugador_sprites['left'].append(sprite)
+                
+                # Derecha
+                sprite = pygame.image.load(os.path.join(jugador_dir, f"walk_right_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.jugador_sprites['right'].append(sprite)
+            
+            print("✓ Sprites del jugador cargados correctamente")
+            
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"⚠️ Error al cargar sprites del jugador: {e}")
+            print("Se usará un círculo en su lugar.")
         
         # TODO: Agregar imágenes para enemigo y salida si las tienes
     
@@ -184,6 +238,34 @@ class ModoEscape:
             for col in range(len(self.mapa[0])):
                 self.dibujar_celda(fila, col, self.mapa[fila][col])
     
+    def actualizar_movimiento(self):
+        """
+        Actualiza el movimiento suave del jugador.
+        Mueve gradualmente desde pos_pixel actual hacia target (destino).
+        """
+        if self.moviendo:
+            # Calcular distancia al objetivo
+            dx = self.target_x - self.pos_pixel_x
+            dy = self.target_y - self.pos_pixel_y
+            
+            # Si está muy cerca, ajustar exactamente
+            if abs(dx) < self.velocidad_movimiento and abs(dy) < self.velocidad_movimiento:
+                self.pos_pixel_x = self.target_x
+                self.pos_pixel_y = self.target_y
+                self.moviendo = False
+            else:
+                # Mover hacia el objetivo
+                if dx != 0:
+                    self.pos_pixel_x += self.velocidad_movimiento if dx > 0 else -self.velocidad_movimiento
+                if dy != 0:
+                    self.pos_pixel_y += self.velocidad_movimiento if dy > 0 else -self.velocidad_movimiento
+            
+            # Animar mientras se mueve
+            self.animation_counter += 1
+            if self.animation_counter >= self.animation_speed:
+                self.jugador_frame = (self.jugador_frame + 1) % 4
+                self.animation_counter = 0
+    
     def dibujar_entidades(self):
         """
         Dibuja todas las entidades del juego:
@@ -218,12 +300,16 @@ class ModoEscape:
                                      self.CELL_SIZE // 3)
         
         # === DIBUJAR JUGADOR ===
-        jugador_x = self.offset_x + self.jugador.columna * self.CELL_SIZE
-        jugador_y = self.offset_y + self.jugador.fila * self.CELL_SIZE
+        # Usar posición suave para movimiento fluido
+        jugador_x = self.offset_x + self.pos_pixel_x
+        jugador_y = self.offset_y + self.pos_pixel_y
         
-        if self.imagen_jugador:
-            self.screen.blit(self.imagen_jugador, (jugador_x, jugador_y))
+        # Si hay sprites cargados, usar animación
+        if self.jugador_sprites[self.jugador_direccion]:
+            sprite_actual = self.jugador_sprites[self.jugador_direccion][self.jugador_frame]
+            self.screen.blit(sprite_actual, (jugador_x, jugador_y))
         else:
+            # Fallback: círculo azul si no hay sprites
             pygame.draw.circle(self.screen, (0, 150, 255),
                              (jugador_x + self.CELL_SIZE // 2, 
                               jugador_y + self.CELL_SIZE // 2),
@@ -278,32 +364,46 @@ class ModoEscape:
         Returns:
             False si debe salir del juego, True si debe continuar
         """
-        if self.juego_terminado:
-            return False
+        # No procesar eventos si el juego terminó o está en movimiento
+        if self.juego_terminado or self.moviendo:
+            return False if self.juego_terminado else True
         
         if evento.type == pygame.KEYDOWN:
             direccion = None
+            direccion_sprite = None
             
             # Detectar qué tecla presionó
-            
             if evento.key == pygame.K_w or evento.key == pygame.K_UP:
                 direccion = "arriba"
+                direccion_sprite = "up"
             elif evento.key == pygame.K_s or evento.key == pygame.K_DOWN:
                 direccion = "abajo"
+                direccion_sprite = "down"
             elif evento.key == pygame.K_a or evento.key == pygame.K_LEFT:
                 direccion = "izquierda"
+                direccion_sprite = "left"
             elif evento.key == pygame.K_d or evento.key == pygame.K_RIGHT:
                 direccion = "derecha"
+                direccion_sprite = "right"
             elif evento.key == pygame.K_ESCAPE:
                 return False  # Salir del modo
             
             if direccion:
+                # Actualizar dirección del sprite
+                if direccion_sprite:
+                    self.jugador_direccion = direccion_sprite
+                
                 # LLAMADA A MAIN.PY: intentar mover al jugador
                 # Esta función valida si el movimiento es posible y actualiza la posición
                 se_movio = mover_jugador(self.jugador, direccion, self.mapa, self.config, correr=False)
                 
                 if se_movio:
-                    # El movimiento fue exitoso, actualizar contadores
+                    # El movimiento fue exitoso, iniciar animación suave
+                    self.target_x = self.jugador.columna * self.CELL_SIZE
+                    self.target_y = self.jugador.fila * self.CELL_SIZE
+                    self.moviendo = True
+                    self.animation_counter = 0
+                    
                     self.movimientos += 1
                     self.turnos += 1
                     
@@ -345,6 +445,9 @@ class ModoEscape:
             - Muestra instrucción para volver al menú
         """
         self.screen.fill(self.COLOR_BG)
+        
+        # Actualizar movimiento suave del jugador
+        self.actualizar_movimiento()
         
         if not self.juego_terminado:
             # Juego activo: dibujar todo normalmente

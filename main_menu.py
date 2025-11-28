@@ -3,6 +3,7 @@ import os
 from data.data_manager import DataManager
 from map import ModoEscape
 from main import DIFICULTAD_FACIL, DIFICULTAD_MEDIA, DIFICULTAD_DIFICIL
+from ui.pantallas_finales import WinScreen, LoseScreen
 
 pygame.init()
 
@@ -224,15 +225,27 @@ class Game:
                     jugando = False
                 else:
                     jugando = modo_escape.manejar_eventos(event)
-                    
-                    # Si el juego terminó y presionó ESC
-                    if modo_escape.juego_terminado and event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_ESCAPE:
-                            # Guardar puntaje
-                            puntaje = modo_escape.obtener_resultado()
-                            if puntaje > 0:
-                                self.data_manager.add_score(self.player_name, puntaje, "escape")
-                            jugando = False
+            
+            # Si el juego terminó, mostrar pantalla final y guardar puntaje
+            if modo_escape.juego_terminado:
+                puntaje = modo_escape.obtener_resultado()
+                # Guardar puntaje automáticamente
+                if puntaje > 0:
+                    self.data_manager.add_score(self.player_name, puntaje, "escape")
+                
+                # Mostrar pantalla de victoria o derrota
+                if "GANASTE" in modo_escape.mensaje_final:
+                    win_screen = WinScreen()
+                    win_screen.show(message=f"Puntaje: {puntaje} pts")
+                else:
+                    lose_screen = LoseScreen()
+                    lose_screen.show(message=modo_escape.mensaje_final)
+                
+                jugando = False
+            
+            # Actualizar movimiento continuo
+            keys = pygame.key.get_pressed()
+            modo_escape.update(keys)
             
             modo_escape.dibujar()
             pygame.display.flip()

@@ -6,7 +6,7 @@ import sys
 from main import (
     generar_mapa,  # Función que genera la matriz del mapa
     Jugador,  # Clase del jugador con posición y energía
-    crear_enemigos_iniciales,  # Crea los enemigos en posiciones válidas
+    crear_enemigos_en_camino,  # Crea los enemigos en el camino principal
     mover_jugador,  # Función que valida y ejecuta movimientos
     mover_enemigos,  # Mueve a los enemigos hacia el jugador
     hay_colision_con_enemigo,  # Detecta si el jugador chocó con enemigo
@@ -46,16 +46,16 @@ class ModoEscape:
         self.config = CONFIGS_DIFICULTAD[dificultad]
         
         # LLAMADA A MAIN.PY: generar el mapa (matriz de terrenos)
-        # Devuelve: mapa, posición inicial, posición de salida
-        self.mapa, self.inicio, self.salida = generar_mapa(ANCHO_MAPA, ALTO_MAPA)
+        # Ahora devuelve: mapa, posición inicial, posición de salida, camino_principal
+        self.mapa, self.inicio, self.salida, self.camino_principal = generar_mapa(ANCHO_MAPA, ALTO_MAPA)
         
         # LLAMADA A MAIN.PY: crear el jugador en la posición inicial
         fila_ini, col_ini = self.inicio
         self.jugador = Jugador(jugador_nombre, fila_ini, col_ini, self.config)
         
-        # LLAMADA A MAIN.PY: crear enemigos en posiciones aleatorias válidas
-        self.enemigos = crear_enemigos_iniciales(
-            self.mapa, 
+        # LLAMADA A MAIN.PY: crear enemigos en el camino principal
+        self.enemigos = crear_enemigos_en_camino(
+            self.camino_principal, 
             self.config.cant_enemigos, 
             self.jugador, 
             self.salida
@@ -109,9 +109,8 @@ class ModoEscape:
             'right': []
         }
         self.jugador_direccion = 'down'  # Dirección actual
-        self.jugador_frame = 0  # Frame actual de animación
-        self.animation_speed = 8  # Velocidad de animación
-        self.animation_counter = 0
+        self.jugador_frame = 0.0  # Frame actual de animación (float para animación suave)
+        self.frame_speed = 0.15  # Velocidad de cambio de frames
         
         # Sprites de enemigos (cazadores) con animación
         self.enemigo_sprites = {
@@ -124,13 +123,11 @@ class ModoEscape:
         self.enemigo_direcciones = {}
         self.enemigo_frames = {}
         
-        # Sistema de movimiento suave
-        self.moviendo = False
-        self.pos_pixel_x = col_ini * self.CELL_SIZE  # Posición en píxeles
+        # Sistema de movimiento continuo (NO por celdas)
+        self.velocidad_jugador = 2  # Píxeles por frame que se mueve
+        self.pos_pixel_x = col_ini * self.CELL_SIZE  # Posición exacta en píxeles
         self.pos_pixel_y = fila_ini * self.CELL_SIZE
-        self.target_x = self.pos_pixel_x  # Posición objetivo
-        self.target_y = self.pos_pixel_y
-        self.velocidad_movimiento = 8  # Píxeles por frame
+        self.moviendo = False  # Si actualmente está en movimiento
         
     def cargar_imagenes(self):
         """
@@ -351,7 +348,7 @@ class ModoEscape:
                     frame = self.enemigo_frames.get(idx, 0)
                     
                     # Dibujar sprite animado del cazador
-                    sprite_actual = self.enemigo_sprites[direccion][frame % 3]
+                    sprite_actual = self.enemigo_sprites[direccion][int(frame) % 3]
                     self.screen.blit(sprite_actual, (enemigo_x, enemigo_y))
                 else:
                     # Fallback: círculo rojo
@@ -367,7 +364,7 @@ class ModoEscape:
         
         # Si hay sprites cargados, usar animación
         if self.jugador_sprites[self.jugador_direccion]:
-            sprite_actual = self.jugador_sprites[self.jugador_direccion][self.jugador_frame]
+            sprite_actual = self.jugador_sprites[self.jugador_direccion][int(self.jugador_frame)]
             self.screen.blit(sprite_actual, (jugador_x, jugador_y))
         else:
             # Fallback: círculo azul si no hay sprites
@@ -413,105 +410,122 @@ class ModoEscape:
                                           True, (150, 150, 150))
         self.screen.blit(inst_text, (self.WIDTH - 250, 70))
     
+    def update(self, keys):
+        """
+        Actualiza el jugador cada frame (movimiento continuo).
+        Similar al ejemplo que proporcionaste.
+        """
+        if self.juego_terminado:
+            return
+        
+        moviendo = False
+        nueva_fila = self.jugador.fila
+        nueva_columna = self.jugador.columna
+        
+        # Detectar movimiento y dirección
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            self.pos_pixel_y -= self.velocidad_jugador
+            self.jugador_direccion = "up"
+            moviendo = True
+            # Calcular nueva celda basada en posición de píxeles
+            nueva_fila = int((self.pos_pixel_y + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.pos_pixel_y += self.velocidad_jugador
+            self.jugador_direccion = "down"
+            moviendo = True
+            nueva_fila = int((self.pos_pixel_y + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            self.pos_pixel_x -= self.velocidad_jugador
+            self.jugador_direccion = "left"
+            moviendo = True
+            nueva_columna = int((self.pos_pixel_x + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.pos_pixel_x += self.velocidad_jugador
+            self.jugador_direccion = "right"
+            moviendo = True
+            nueva_columna = int((self.pos_pixel_x + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        
+        # Validar límites y colisiones con muros
+        if moviendo:
+            # Verificar si la nueva posición es válida
+            if (0 <= nueva_fila < ALTO_MAPA and 0 <= nueva_columna < ANCHO_MAPA):
+                casilla = self.mapa[nueva_fila][nueva_columna]
+                
+                # Si chocó con muro, retroceder
+                if isinstance(casilla, Muro):
+                    if keys[pygame.K_w] or keys[pygame.K_UP]:
+                        self.pos_pixel_y += self.velocidad_jugador
+                    elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
+                        self.pos_pixel_y -= self.velocidad_jugador
+                    elif keys[pygame.K_a] or keys[pygame.K_LEFT]:
+                        self.pos_pixel_x += self.velocidad_jugador
+                    elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+                        self.pos_pixel_x -= self.velocidad_jugador
+                else:
+                    # Actualizar celda del jugador si cambió
+                    if nueva_fila != self.jugador.fila or nueva_columna != self.jugador.columna:
+                        self.jugador.fila = nueva_fila
+                        self.jugador.columna = nueva_columna
+                        self.movimientos += 1
+                        self.turnos += 1
+                        
+                        # Verificar victoria
+                        if self.jugador.fila == self.salida[0] and self.jugador.columna == self.salida[1]:
+                            self.puntaje_final = calcular_puntaje(self.movimientos, self.config)
+                            self.mensaje_final = "¡GANASTE! Has llegado a la salida"
+                            self.juego_terminado = True
+                            return
+                        
+                        # Mover enemigos
+                        if self.turnos % self.config.vel_enemigos == 0:
+                            posiciones_anteriores = [(e.fila, e.columna) for e in self.enemigos]
+                            mover_enemigos(self.enemigos, self.jugador, self.mapa)
+                            
+                            # Actualizar animación de enemigos
+                            for idx, enemigo in enumerate(self.enemigos):
+                                if enemigo.vivo:
+                                    fila_ant, col_ant = posiciones_anteriores[idx]
+                                    if enemigo.columna > col_ant:
+                                        self.enemigo_direcciones[idx] = 'right'
+                                    elif enemigo.columna < col_ant:
+                                        self.enemigo_direcciones[idx] = 'left'
+                                    elif enemigo.fila > fila_ant:
+                                        self.enemigo_direcciones[idx] = 'down'
+                                    elif enemigo.fila < fila_ant:
+                                        self.enemigo_direcciones[idx] = 'up'
+                                    
+                                    if (enemigo.fila, enemigo.columna) != (fila_ant, col_ant):
+                                        self.enemigo_frames[idx] = (self.enemigo_frames.get(idx, 0) + 1) % 3
+                        
+                        # Verificar colisión con enemigos
+                        if hay_colision_con_enemigo(self.jugador, self.enemigos):
+                            self.puntaje_final = 0
+                            self.mensaje_final = "PERDISTE: Un cazador te atrapó"
+                            self.juego_terminado = True
+                            return
+                        
+                        # Recuperar energía
+                        recuperar_energia_jugador(self.jugador, self.config)
+        
+        # Animar sprite mientras se mueve
+        if moviendo:
+            self.jugador_frame += self.frame_speed
+            if self.jugador_frame >= len(self.jugador_sprites[self.jugador_direccion]):
+                self.jugador_frame = 0
+        else:
+            self.jugador_frame = 0  # Frame quieto
+    
     def manejar_eventos(self, evento):
         """
-        Captura las teclas presionadas y procesa el movimiento del jugador.
-        
-        IMPORTANTE: Este método NO valida el movimiento, solo:
-        1. Detecta qué tecla presionó el usuario
-        2. Llama a mover_jugador() de main.py (que tiene la lógica real)
-        3. Si el movimiento fue exitoso, actualiza contadores y revisa victoria/derrota
-        
-        Returns:
-            False si debe salir del juego, True si debe continuar
+        Solo maneja eventos de salida ahora.
+        El movimiento se hace con keys en update().
         """
-        # No procesar eventos si el juego terminó o está en movimiento
-        if self.juego_terminado or self.moviendo:
-            return False if self.juego_terminado else True
-        
         if evento.type == pygame.KEYDOWN:
-            direccion = None
-            direccion_sprite = None
-            
-            # Detectar qué tecla presionó
-            if evento.key == pygame.K_w or evento.key == pygame.K_UP:
-                direccion = "arriba"
-                direccion_sprite = "up"
-            elif evento.key == pygame.K_s or evento.key == pygame.K_DOWN:
-                direccion = "abajo"
-                direccion_sprite = "down"
-            elif evento.key == pygame.K_a or evento.key == pygame.K_LEFT:
-                direccion = "izquierda"
-                direccion_sprite = "left"
-            elif evento.key == pygame.K_d or evento.key == pygame.K_RIGHT:
-                direccion = "derecha"
-                direccion_sprite = "right"
-            elif evento.key == pygame.K_ESCAPE:
-                return False  # Salir del modo
-            
-            if direccion:
-                # Actualizar dirección del sprite
-                if direccion_sprite:
-                    self.jugador_direccion = direccion_sprite
-                
-                # LLAMADA A MAIN.PY: intentar mover al jugador
-                # Esta función valida si el movimiento es posible y actualiza la posición
-                se_movio = mover_jugador(self.jugador, direccion, self.mapa, self.config, correr=False)
-                
-                if se_movio:
-                    # El movimiento fue exitoso, iniciar animación suave
-                    self.target_x = self.jugador.columna * self.CELL_SIZE
-                    self.target_y = self.jugador.fila * self.CELL_SIZE
-                    self.moviendo = True
-                    self.animation_counter = 0
+            if evento.key == pygame.K_ESCAPE:
+                return False
+        return True
                     
-                    self.movimientos += 1
-                    self.turnos += 1
-                    
-                    # ¿Llegó a la salida? -> GANA
-                    if self.jugador.fila == self.salida[0] and self.jugador.columna == self.salida[1]:
-                        self.puntaje_final = calcular_puntaje(self.movimientos, self.config)
-                        self.mensaje_final = "¡GANASTE! Has llegado a la salida"
-                        self.juego_terminado = True
-                        return True
-                    
-                    # Mover enemigos cada cierto número de turnos
-                    if self.turnos % self.config.vel_enemigos == 0:
-                        # Guardar posiciones anteriores para detectar dirección
-                        posiciones_anteriores = [(e.fila, e.columna) for e in self.enemigos]
-                        
-                        mover_enemigos(self.enemigos, self.jugador, self.mapa)
-                        
-                        # Actualizar dirección y frame de cada enemigo
-                        for idx, enemigo in enumerate(self.enemigos):
-                            if enemigo.vivo:
-                                fila_ant, col_ant = posiciones_anteriores[idx]
-                                
-                                # Detectar hacia dónde se movió
-                                if enemigo.columna > col_ant:
-                                    self.enemigo_direcciones[idx] = 'right'
-                                elif enemigo.columna < col_ant:
-                                    self.enemigo_direcciones[idx] = 'left'
-                                elif enemigo.fila > fila_ant:
-                                    self.enemigo_direcciones[idx] = 'down'
-                                elif enemigo.fila < fila_ant:
-                                    self.enemigo_direcciones[idx] = 'up'
-                                
-                                # Avanzar frame de animación si se movió
-                                if (enemigo.fila, enemigo.columna) != (fila_ant, col_ant):
-                                    self.enemigo_frames[idx] = (self.enemigo_frames.get(idx, 0) + 1) % 3
-                    
-                    # ¿Chocó con un enemigo? -> PIERDE
-                    if hay_colision_con_enemigo(self.jugador, self.enemigos):
-                        self.puntaje_final = 0
-                        self.mensaje_final = "PERDISTE: Un cazador te atrapó"
-                        self.juego_terminado = True
-                        return True
-                    
-                    # LLAMADA A MAIN.PY: recuperar energía pasiva
-                    recuperar_energia_jugador(self.jugador, self.config)
-        
-        return True  # Continuar jugando
+
     
     def dibujar(self):
         """
@@ -532,38 +546,10 @@ class ModoEscape:
         # Actualizar movimiento suave del jugador
         self.actualizar_movimiento()
         
-        if not self.juego_terminado:
-            # Juego activo: dibujar todo normalmente
-            self.dibujar_mapa()
-            self.dibujar_entidades()
-            self.dibujar_ui()
-        else:
-            # Juego terminado: mostrar pantalla final
-            self.dibujar_mapa()
-            self.dibujar_entidades()
-            
-            # Overlay oscuro semi-transparente
-            overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
-            overlay.set_alpha(180)
-            overlay.fill((0, 0, 0))
-            self.screen.blit(overlay, (0, 0))
-            
-            # Mensaje de victoria o derrota
-            font_grande = pygame.font.Font(None, 60)
-            color = self.COLOR_SUCCESS if "GANASTE" in self.mensaje_final else self.COLOR_DANGER
-            mensaje = font_grande.render(self.mensaje_final, True, color)
-            self.screen.blit(mensaje, (self.WIDTH // 2 - mensaje.get_width() // 2, self.HEIGHT // 2 - 50))
-            
-            # Mostrar puntaje final
-            puntaje_text = self.font_medium.render(f"Puntaje: {self.puntaje_final}", 
-                                                   True, self.COLOR_TEXT)
-            self.screen.blit(puntaje_text, 
-                           (self.WIDTH // 2 - puntaje_text.get_width() // 2, self.HEIGHT // 2 + 20))
-            
-            # Instrucción para salir
-            inst = self.font_small.render("Presiona ESC para volver al menú", 
-                                         True, (200, 200, 200))
-            self.screen.blit(inst, (self.WIDTH // 2 - inst.get_width() // 2, self.HEIGHT // 2 + 80))
+        # Dibujar juego normalmente
+        self.dibujar_mapa()
+        self.dibujar_entidades()
+        self.dibujar_ui()
     
     def obtener_resultado(self):
         """

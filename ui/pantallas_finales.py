@@ -123,8 +123,8 @@ class LoseScreen(FinalScreen):
 
 if __name__ == '__main__':
 	# Demo rápido: cambia estas banderas a True/False para ver cada pantalla
-	SHOW_WIN = True
-	SHOW_LOSE = False
+	SHOW_WIN = False
+	SHOW_LOSE = True
 
 	pygame.init()
 	pygame.font.init()

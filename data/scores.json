@@ -12,7 +12,9 @@
                 200,
                 200,
                 200,
-                200
+                200,
+                572,
+                550
             ],
             "historial_cazador": [
                 500,
@@ -26,7 +28,8 @@
             "mejor_escapa": 900,
             "mejor_cazador": 400,
             "historial_escapa": [
-                900
+                900,
+                132
             ],
             "historial_cazador": [
                 400

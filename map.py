@@ -6,9 +6,14 @@ import sys
 from main import (
     generar_mapa,  # Función que genera la matriz del mapa
     Jugador,  # Clase del jugador con posición y energía
-    crear_enemigos_iniciales,  # Crea los enemigos en posiciones válidas
+    crear_enemigos_en_camino,  # Crea los enemigos en el camino principal
     mover_jugador,  # Función que valida y ejecuta movimientos
     mover_enemigos,  # Mueve a los enemigos hacia el jugador
+    Bomba,  # Clase de bomba
+    colocar_bomba,  # Función para colocar bombas
+    explotar_bomba,  # Función para explotar bombas
+    procesar_bombas_y_respawn,  # Procesa explosiones y respawn
+    DEMORA_EXPLOSION_BOMBA,  # Turnos antes de explotar
     hay_colision_con_enemigo,  # Detecta si el jugador chocó con enemigo
     calcular_puntaje,  # Calcula puntos según movimientos y dificultad
     recuperar_energia_jugador,  # Recupera energía pasiva del jugador
@@ -46,16 +51,16 @@ class ModoEscape:
         self.config = CONFIGS_DIFICULTAD[dificultad]
         
         # LLAMADA A MAIN.PY: generar el mapa (matriz de terrenos)
-        # Devuelve: mapa, posición inicial, posición de salida
-        self.mapa, self.inicio, self.salida = generar_mapa(ANCHO_MAPA, ALTO_MAPA)
+        # Ahora devuelve: mapa, posición inicial, posición de salida, camino_principal
+        self.mapa, self.inicio, self.salida, self.camino_principal = generar_mapa(ANCHO_MAPA, ALTO_MAPA)
         
         # LLAMADA A MAIN.PY: crear el jugador en la posición inicial
         fila_ini, col_ini = self.inicio
         self.jugador = Jugador(jugador_nombre, fila_ini, col_ini, self.config)
         
-        # LLAMADA A MAIN.PY: crear enemigos en posiciones aleatorias válidas
-        self.enemigos = crear_enemigos_iniciales(
-            self.mapa, 
+        # LLAMADA A MAIN.PY: crear enemigos en el camino principal
+        self.enemigos = crear_enemigos_en_camino(
+            self.camino_principal, 
             self.config.cant_enemigos, 
             self.jugador, 
             self.salida
@@ -99,7 +104,6 @@ class ModoEscape:
         self.imagen_liana = None
         self.imagen_tunel = None
         self.imagen_muro = None
-        self.imagen_enemigo = None
         self.imagen_salida = None
         
         # Sprites del jugador con animación
@@ -110,17 +114,34 @@ class ModoEscape:
             'right': []
         }
         self.jugador_direccion = 'down'  # Dirección actual
-        self.jugador_frame = 0  # Frame actual de animación
-        self.animation_speed = 8  # Velocidad de animación
-        self.animation_counter = 0
+        self.jugador_frame = 0.0  # Frame actual de animación (float para animación suave)
+        self.frame_speed = 0.15  # Velocidad de cambio de frames
         
-        # Sistema de movimiento suave
-        self.moviendo = False
-        self.pos_pixel_x = col_ini * self.CELL_SIZE  # Posición en píxeles
+        # Sprites de enemigos (cazadores) con animación
+        self.enemigo_sprites = {
+            'down': [],
+            'up': [],
+            'left': [],
+            'right': []
+        }
+        # Guardar la dirección de cada enemigo (índice del enemigo -> dirección)
+        self.enemigo_direcciones = {}
+        self.enemigo_frames = {}
+        
+        # Sistema de movimiento continuo (NO por celdas)
+        self.velocidad_jugador = 2  # Píxeles por frame que se mueve
+        self.pos_pixel_x = col_ini * self.CELL_SIZE  # Posición exacta en píxeles
         self.pos_pixel_y = fila_ini * self.CELL_SIZE
-        self.target_x = self.pos_pixel_x  # Posición objetivo
-        self.target_y = self.pos_pixel_y
-        self.velocidad_movimiento = 8  # Píxeles por frame
+        self.moviendo = False  # Si actualmente está en movimiento
+        
+        # Sistema de bombas
+        self.bombas = []  # Lista de bombas colocadas
+        self.ultimo_turno_bomba = -999  # Último turno en que se colocó una bomba
+        self.enemigos_por_respawnear = []  # Enemigos que reaparecerán
+        self.bomba_sprites = []  # Sprites de la bomba (6 frames)
+        self.explosion_sprites = []  # Sprites de explosión (10 frames)
+        self.explosiones_activas = []  # Lista de explosiones en pantalla: [(fila, col, frame, frame_counter)]
+        self.espacio_presionado = False  # Para detectar solo una vez al presionar ESPACIO
         
     def cargar_imagenes(self):
         """
@@ -187,7 +208,74 @@ class ModoEscape:
             print(f"⚠️ Error al cargar sprites del jugador: {e}")
             print("Se usará un círculo en su lugar.")
         
-        # TODO: Agregar imágenes para enemigo y salida si las tienes
+        # Cargar sprites de enemigos (cazadores)
+        try:
+            import os
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            cazador_dir = os.path.join(base_dir, "data", "cazador")
+            
+            # Cargar sprites de cada dirección (3 frames por dirección)
+            for i in range(3):
+                # Abajo
+                sprite = pygame.image.load(os.path.join(cazador_dir, f"w_down_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['down'].append(sprite)
+                
+                # Arriba - manejo especial para el archivo con nombre diferente
+                if i == 2:
+                    # El tercer frame tiene un nombre diferente: w_ups_2.png
+                    sprite = pygame.image.load(os.path.join(cazador_dir, "w_ups_2.png"))
+                else:
+                    sprite = pygame.image.load(os.path.join(cazador_dir, f"w_up_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['up'].append(sprite)
+                
+                # Izquierda
+                sprite = pygame.image.load(os.path.join(cazador_dir, f"w_left_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['left'].append(sprite)
+                
+                # Derecha
+                sprite = pygame.image.load(os.path.join(cazador_dir, f"w_right_{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.enemigo_sprites['right'].append(sprite)
+            
+            # Inicializar dirección y frame para cada enemigo
+            for i, enemigo in enumerate(self.enemigos):
+                self.enemigo_direcciones[i] = 'down'
+                self.enemigo_frames[i] = 0
+            
+            print("✓ Sprites de cazadores cargados correctamente")
+            
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"⚠️ Error al cargar sprites de cazadores: {e}")
+            print("Se usarán círculos rojos en su lugar.")
+        
+        # Cargar sprites de bombas y explosiones
+        try:
+            import os
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Cargar sprites de bombas (6 frames)
+            bomb_dir = os.path.join(base_dir, "data", "bomb")
+            for i in range(1, 7):
+                sprite = pygame.image.load(os.path.join(bomb_dir, f"bomb{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.bomba_sprites.append(sprite)
+            
+            # Cargar sprites de explosiones (10 frames)
+            explosion_dir = os.path.join(base_dir, "data", "explotions")
+            for i in range(1, 11):
+                sprite = pygame.image.load(os.path.join(explosion_dir, f"Explosion{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.explosion_sprites.append(sprite)
+            
+            print("✓ Sprites de bombas y explosiones cargados correctamente")
+            
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"⚠️ Error al cargar sprites de bombas/explosiones: {e}")
+        
+        # TODO: Agregar imagen para salida si la tienes
     
     def dibujar_celda(self, fila, col, casilla):
         """
@@ -286,14 +374,22 @@ class ModoEscape:
             self.screen.blit(texto_salida, (salida_x + 5, salida_y + 5))
         
         # === DIBUJAR ENEMIGOS ===
-        for enemigo in self.enemigos:
+        for idx, enemigo in enumerate(self.enemigos):
             if enemigo.vivo:  # Solo dibujar enemigos que siguen vivos
                 enemigo_x = self.offset_x + enemigo.columna * self.CELL_SIZE
                 enemigo_y = self.offset_y + enemigo.fila * self.CELL_SIZE
                 
-                if self.imagen_enemigo:
-                    self.screen.blit(self.imagen_enemigo, (enemigo_x, enemigo_y))
+                # Si hay sprites de cazadores, usarlos
+                if self.enemigo_sprites['down']:
+                    # Obtener dirección y frame de este enemigo
+                    direccion = self.enemigo_direcciones.get(idx, 'down')
+                    frame = self.enemigo_frames.get(idx, 0)
+                    
+                    # Dibujar sprite animado del cazador
+                    sprite_actual = self.enemigo_sprites[direccion][int(frame) % 3]
+                    self.screen.blit(sprite_actual, (enemigo_x, enemigo_y))
                 else:
+                    # Fallback: círculo rojo
                     pygame.draw.circle(self.screen, (255, 0, 0),
                                      (enemigo_x + self.CELL_SIZE // 2, 
                                       enemigo_y + self.CELL_SIZE // 2),
@@ -306,7 +402,7 @@ class ModoEscape:
         
         # Si hay sprites cargados, usar animación
         if self.jugador_sprites[self.jugador_direccion]:
-            sprite_actual = self.jugador_sprites[self.jugador_direccion][self.jugador_frame]
+            sprite_actual = self.jugador_sprites[self.jugador_direccion][int(self.jugador_frame)]
             self.screen.blit(sprite_actual, (jugador_x, jugador_y))
         else:
             # Fallback: círculo azul si no hay sprites
@@ -314,6 +410,44 @@ class ModoEscape:
                              (jugador_x + self.CELL_SIZE // 2, 
                               jugador_y + self.CELL_SIZE // 2),
                              self.CELL_SIZE // 3)
+        
+        # === DIBUJAR BOMBAS ===
+        for bomba in self.bombas:
+            if not bomba.explotada:
+                bomba_x = self.offset_x + bomba.columna * self.CELL_SIZE
+                bomba_y = self.offset_y + bomba.fila * self.CELL_SIZE
+                
+                # Animación de la bomba (6 frames, ciclar)
+                tiempo_desde_colocada = self.turnos - bomba.turno_colocada
+                frame_bomba = (tiempo_desde_colocada * 2) % len(self.bomba_sprites) if self.bomba_sprites else 0
+                
+                if self.bomba_sprites:
+                    self.screen.blit(self.bomba_sprites[frame_bomba], (bomba_x, bomba_y))
+                else:
+                    # Fallback: círculo negro con borde rojo
+                    pygame.draw.circle(self.screen, (0, 0, 0),
+                                     (bomba_x + self.CELL_SIZE // 2, 
+                                      bomba_y + self.CELL_SIZE // 2),
+                                     self.CELL_SIZE // 3)
+                    pygame.draw.circle(self.screen, (255, 0, 0),
+                                     (bomba_x + self.CELL_SIZE // 2, 
+                                      bomba_y + self.CELL_SIZE // 2),
+                                     self.CELL_SIZE // 3, 2)
+        
+        # === DIBUJAR EXPLOSIONES ===
+        for explosion in self.explosiones_activas:
+            fila, columna, frame, _ = explosion
+            exp_x = self.offset_x + columna * self.CELL_SIZE
+            exp_y = self.offset_y + fila * self.CELL_SIZE
+            
+            if self.explosion_sprites and frame < len(self.explosion_sprites):
+                self.screen.blit(self.explosion_sprites[frame], (exp_x, exp_y))
+            else:
+                # Fallback: círculo naranja brillante
+                pygame.draw.circle(self.screen, (255, 150, 0),
+                                 (exp_x + self.CELL_SIZE // 2, 
+                                  exp_y + self.CELL_SIZE // 2),
+                                 self.CELL_SIZE // 2)
     
     def dibujar_ui(self):
         """
@@ -348,87 +482,203 @@ class ModoEscape:
         self.screen.blit(mov_text, (self.WIDTH - 200, 45))
         
         # Instrucciones
-        inst_text = self.font_small.render("WASD: Mover | ESC: Salir", 
+        inst_text = self.font_small.render("WASD: Mover | ESPACIO: Bomba | ESC: Salir", 
                                           True, (150, 150, 150))
-        self.screen.blit(inst_text, (self.WIDTH - 250, 70))
+        self.screen.blit(inst_text, (self.WIDTH - 350, 70))
+        
+        # Mostrar bombas disponibles
+        bombas_activas = len([b for b in self.bombas if not b.explotada])
+        bombas_text = self.font_small.render(f"Bombas: {bombas_activas}/3", 
+                                            True, self.COLOR_TEXT)
+        self.screen.blit(bombas_text, (10, 95))
+    
+    def update(self, keys):
+        """
+        Actualiza el jugador cada frame (movimiento continuo).
+        Similar al ejemplo que proporcionaste.
+        """
+        if self.juego_terminado:
+            return
+        
+        moviendo = False
+        nueva_fila = self.jugador.fila
+        nueva_columna = self.jugador.columna
+        
+        # Detectar movimiento y dirección
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            self.pos_pixel_y -= self.velocidad_jugador
+            self.jugador_direccion = "up"
+            moviendo = True
+            # Calcular nueva celda basada en posición de píxeles
+            nueva_fila = int((self.pos_pixel_y + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.pos_pixel_y += self.velocidad_jugador
+            self.jugador_direccion = "down"
+            moviendo = True
+            nueva_fila = int((self.pos_pixel_y + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            self.pos_pixel_x -= self.velocidad_jugador
+            self.jugador_direccion = "left"
+            moviendo = True
+            nueva_columna = int((self.pos_pixel_x + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.pos_pixel_x += self.velocidad_jugador
+            self.jugador_direccion = "right"
+            moviendo = True
+            nueva_columna = int((self.pos_pixel_x + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        
+        # Validar límites y colisiones con muros
+        if moviendo:
+            # Verificar si la nueva posición es válida
+            if (0 <= nueva_fila < ALTO_MAPA and 0 <= nueva_columna < ANCHO_MAPA):
+                casilla = self.mapa[nueva_fila][nueva_columna]
+                
+                # Si chocó con muro, retroceder
+                if isinstance(casilla, Muro):
+                    if keys[pygame.K_w] or keys[pygame.K_UP]:
+                        self.pos_pixel_y += self.velocidad_jugador
+                    elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
+                        self.pos_pixel_y -= self.velocidad_jugador
+                    elif keys[pygame.K_a] or keys[pygame.K_LEFT]:
+                        self.pos_pixel_x += self.velocidad_jugador
+                    elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+                        self.pos_pixel_x -= self.velocidad_jugador
+                else:
+                    # Actualizar celda del jugador si cambió
+                    if nueva_fila != self.jugador.fila or nueva_columna != self.jugador.columna:
+                        self.jugador.fila = nueva_fila
+                        self.jugador.columna = nueva_columna
+                        self.movimientos += 1
+                        self.turnos += 1
+                        
+                        # Verificar victoria
+                        if self.jugador.fila == self.salida[0] and self.jugador.columna == self.salida[1]:
+                            self.puntaje_final = calcular_puntaje(self.movimientos, self.config)
+                            self.mensaje_final = "¡GANASTE! Has llegado a la salida"
+                            self.juego_terminado = True
+                            return
+                        
+                        # Mover enemigos
+                        if self.turnos % self.config.vel_enemigos == 0:
+                            posiciones_anteriores = [(e.fila, e.columna) for e in self.enemigos]
+                            mover_enemigos(self.enemigos, self.jugador, self.mapa)
+                            
+                            # Actualizar animación de enemigos
+                            for idx, enemigo in enumerate(self.enemigos):
+                                if enemigo.vivo:
+                                    fila_ant, col_ant = posiciones_anteriores[idx]
+                                    if enemigo.columna > col_ant:
+                                        self.enemigo_direcciones[idx] = 'right'
+                                    elif enemigo.columna < col_ant:
+                                        self.enemigo_direcciones[idx] = 'left'
+                                    elif enemigo.fila > fila_ant:
+                                        self.enemigo_direcciones[idx] = 'down'
+                                    elif enemigo.fila < fila_ant:
+                                        self.enemigo_direcciones[idx] = 'up'
+                                    
+                                    if (enemigo.fila, enemigo.columna) != (fila_ant, col_ant):
+                                        self.enemigo_frames[idx] = (self.enemigo_frames.get(idx, 0) + 1) % 3
+                        
+                        # Verificar colisión con enemigos
+                        if hay_colision_con_enemigo(self.jugador, self.enemigos):
+                            self.puntaje_final = 0
+                            self.mensaje_final = "PERDISTE: Un cazador te atrapó"
+                            self.juego_terminado = True
+                            return
+                        
+                        # Recuperar energía
+                        recuperar_energia_jugador(self.jugador, self.config)
+        
+        # Animar sprite mientras se mueve
+        if moviendo:
+            self.jugador_frame += self.frame_speed
+            if self.jugador_frame >= len(self.jugador_sprites[self.jugador_direccion]):
+                self.jugador_frame = 0
+        else:
+            self.jugador_frame = 0  # Frame quieto
+        
+        # Detectar tecla ESPACIO para colocar bomba (solo una vez al presionar)
+        if keys[pygame.K_SPACE] and not self.espacio_presionado:
+            self.espacio_presionado = True
+            se_coloco, self.ultimo_turno_bomba = colocar_bomba(
+                self.bombas,
+                self.jugador,
+                self.mapa,
+                self.turnos,
+                self.ultimo_turno_bomba
+            )
+        elif not keys[pygame.K_SPACE]:
+            self.espacio_presionado = False
+        
+        # Actualizar bombas y explosiones
+        self.actualizar_bombas()
+    
+    def actualizar_bombas(self):
+        """
+        Revisa todas las bombas activas:
+        - Si un enemigo pisa una bomba, explota inmediatamente
+        - Si llegaron al tiempo de explosión, las hace explotar
+        - Gestiona respawn de enemigos después de 10 turnos
+        - Actualiza animaciones de explosiones activas
+        """
+        # Guardar posiciones de bombas que van a explotar ANTES de procesarlas
+        bombas_a_explotar = []
+        for bomba in self.bombas:
+            if not bomba.explotada:
+                # Verificar si debe explotar por tiempo
+                if self.turnos - bomba.turno_colocada >= DEMORA_EXPLOSION_BOMBA:
+                    bombas_a_explotar.append((bomba.fila, bomba.columna))
+                # O si un enemigo está encima
+                else:
+                    for enemigo in self.enemigos:
+                        if enemigo.vivo and enemigo.fila == bomba.fila and enemigo.columna == bomba.columna:
+                            if (bomba.fila, bomba.columna) not in bombas_a_explotar:
+                                bombas_a_explotar.append((bomba.fila, bomba.columna))
+                            break
+        
+        # Usar la función completa de main.py que maneja todo
+        procesar_bombas_y_respawn(
+            self.bombas,
+            self.enemigos,
+            self.jugador,
+            self.mapa,
+            self.salida,
+            self.turnos,
+            self.enemigos_por_respawnear
+        )
+        
+        # Agregar explosiones visuales para las bombas que explotaron
+        for fila, columna in bombas_a_explotar:
+            ya_existe = any(exp[0] == fila and exp[1] == columna 
+                          for exp in self.explosiones_activas)
+            if not ya_existe:
+                self.explosiones_activas.append([fila, columna, 0, 0])
+        
+        # Actualizar animaciones de explosiones
+        explosiones_a_eliminar = []
+        for i, explosion in enumerate(self.explosiones_activas):
+            explosion[3] += 1  # Incrementar contador de frames
+            if explosion[3] >= 2:  # Cada 2 frames, avanzar animación (más rápido)
+                explosion[3] = 0
+                explosion[2] += 1  # Siguiente frame
+                if explosion[2] >= len(self.explosion_sprites):
+                    explosiones_a_eliminar.append(i)
+        
+        # Eliminar explosiones terminadas
+        for i in reversed(explosiones_a_eliminar):
+            self.explosiones_activas.pop(i)
     
     def manejar_eventos(self, evento):
         """
-        Captura las teclas presionadas y procesa el movimiento del jugador.
-        
-        IMPORTANTE: Este método NO valida el movimiento, solo:
-        1. Detecta qué tecla presionó el usuario
-        2. Llama a mover_jugador() de main.py (que tiene la lógica real)
-        3. Si el movimiento fue exitoso, actualiza contadores y revisa victoria/derrota
-        
-        Returns:
-            False si debe salir del juego, True si debe continuar
+        Solo maneja eventos de salida ahora.
+        El movimiento se hace con keys en update().
         """
-        # No procesar eventos si el juego terminó o está en movimiento
-        if self.juego_terminado or self.moviendo:
-            return False if self.juego_terminado else True
-        
         if evento.type == pygame.KEYDOWN:
-            direccion = None
-            direccion_sprite = None
-            
-            # Detectar qué tecla presionó
-            if evento.key == pygame.K_w or evento.key == pygame.K_UP:
-                direccion = "arriba"
-                direccion_sprite = "up"
-            elif evento.key == pygame.K_s or evento.key == pygame.K_DOWN:
-                direccion = "abajo"
-                direccion_sprite = "down"
-            elif evento.key == pygame.K_a or evento.key == pygame.K_LEFT:
-                direccion = "izquierda"
-                direccion_sprite = "left"
-            elif evento.key == pygame.K_d or evento.key == pygame.K_RIGHT:
-                direccion = "derecha"
-                direccion_sprite = "right"
-            elif evento.key == pygame.K_ESCAPE:
-                return False  # Salir del modo
-            
-            if direccion:
-                # Actualizar dirección del sprite
-                if direccion_sprite:
-                    self.jugador_direccion = direccion_sprite
-                
-                # LLAMADA A MAIN.PY: intentar mover al jugador
-                # Esta función valida si el movimiento es posible y actualiza la posición
-                se_movio = mover_jugador(self.jugador, direccion, self.mapa, self.config, correr=False)
-                
-                if se_movio:
-                    # El movimiento fue exitoso, iniciar animación suave
-                    self.target_x = self.jugador.columna * self.CELL_SIZE
-                    self.target_y = self.jugador.fila * self.CELL_SIZE
-                    self.moviendo = True
-                    self.animation_counter = 0
+            if evento.key == pygame.K_ESCAPE:
+                return False
+        return True
                     
-                    self.movimientos += 1
-                    self.turnos += 1
-                    
-                    # ¿Llegó a la salida? -> GANA
-                    if self.jugador.fila == self.salida[0] and self.jugador.columna == self.salida[1]:
-                        self.puntaje_final = calcular_puntaje(self.movimientos, self.config)
-                        self.mensaje_final = "¡GANASTE! Has llegado a la salida"
-                        self.juego_terminado = True
-                        return True
-                    
-                    # Mover enemigos cada cierto número de turnos
-                    if self.turnos % self.config.vel_enemigos == 0:
-                        mover_enemigos(self.enemigos, self.jugador, self.mapa)
-                    
-                    # ¿Chocó con un enemigo? -> PIERDE
-                    if hay_colision_con_enemigo(self.jugador, self.enemigos):
-                        self.puntaje_final = 0
-                        self.mensaje_final = "PERDISTE: Un cazador te atrapó"
-                        self.juego_terminado = True
-                        return True
-                    
-                    # LLAMADA A MAIN.PY: recuperar energía pasiva
-                    recuperar_energia_jugador(self.jugador, self.config)
-        
-        return True  # Continuar jugando
+
     
     def dibujar(self):
         """
@@ -449,38 +699,10 @@ class ModoEscape:
         # Actualizar movimiento suave del jugador
         self.actualizar_movimiento()
         
-        if not self.juego_terminado:
-            # Juego activo: dibujar todo normalmente
-            self.dibujar_mapa()
-            self.dibujar_entidades()
-            self.dibujar_ui()
-        else:
-            # Juego terminado: mostrar pantalla final
-            self.dibujar_mapa()
-            self.dibujar_entidades()
-            
-            # Overlay oscuro semi-transparente
-            overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
-            overlay.set_alpha(180)
-            overlay.fill((0, 0, 0))
-            self.screen.blit(overlay, (0, 0))
-            
-            # Mensaje de victoria o derrota
-            font_grande = pygame.font.Font(None, 60)
-            color = self.COLOR_SUCCESS if "GANASTE" in self.mensaje_final else self.COLOR_DANGER
-            mensaje = font_grande.render(self.mensaje_final, True, color)
-            self.screen.blit(mensaje, (self.WIDTH // 2 - mensaje.get_width() // 2, self.HEIGHT // 2 - 50))
-            
-            # Mostrar puntaje final
-            puntaje_text = self.font_medium.render(f"Puntaje: {self.puntaje_final}", 
-                                                   True, self.COLOR_TEXT)
-            self.screen.blit(puntaje_text, 
-                           (self.WIDTH // 2 - puntaje_text.get_width() // 2, self.HEIGHT // 2 + 20))
-            
-            # Instrucción para salir
-            inst = self.font_small.render("Presiona ESC para volver al menú", 
-                                         True, (200, 200, 200))
-            self.screen.blit(inst, (self.WIDTH // 2 - inst.get_width() // 2, self.HEIGHT // 2 + 80))
+        # Dibujar juego normalmente
+        self.dibujar_mapa()
+        self.dibujar_entidades()
+        self.dibujar_ui()
     
     def obtener_resultado(self):
         """

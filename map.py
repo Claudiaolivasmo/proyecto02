@@ -9,6 +9,11 @@ from main import (
     crear_enemigos_en_camino,  # Crea los enemigos en el camino principal
     mover_jugador,  # Función que valida y ejecuta movimientos
     mover_enemigos,  # Mueve a los enemigos hacia el jugador
+    Bomba,  # Clase de bomba
+    colocar_bomba,  # Función para colocar bombas
+    explotar_bomba,  # Función para explotar bombas
+    procesar_bombas_y_respawn,  # Procesa explosiones y respawn
+    DEMORA_EXPLOSION_BOMBA,  # Turnos antes de explotar
     hay_colision_con_enemigo,  # Detecta si el jugador chocó con enemigo
     calcular_puntaje,  # Calcula puntos según movimientos y dificultad
     recuperar_energia_jugador,  # Recupera energía pasiva del jugador
@@ -129,6 +134,15 @@ class ModoEscape:
         self.pos_pixel_y = fila_ini * self.CELL_SIZE
         self.moviendo = False  # Si actualmente está en movimiento
         
+        # Sistema de bombas
+        self.bombas = []  # Lista de bombas colocadas
+        self.ultimo_turno_bomba = -999  # Último turno en que se colocó una bomba
+        self.enemigos_por_respawnear = []  # Enemigos que reaparecerán
+        self.bomba_sprites = []  # Sprites de la bomba (6 frames)
+        self.explosion_sprites = []  # Sprites de explosión (10 frames)
+        self.explosiones_activas = []  # Lista de explosiones en pantalla: [(fila, col, frame, frame_counter)]
+        self.espacio_presionado = False  # Para detectar solo una vez al presionar ESPACIO
+        
     def cargar_imagenes(self):
         """
         Carga todas las imágenes del terreno desde la carpeta data/terreno.
@@ -236,6 +250,30 @@ class ModoEscape:
         except (pygame.error, FileNotFoundError) as e:
             print(f"⚠️ Error al cargar sprites de cazadores: {e}")
             print("Se usarán círculos rojos en su lugar.")
+        
+        # Cargar sprites de bombas y explosiones
+        try:
+            import os
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Cargar sprites de bombas (6 frames)
+            bomb_dir = os.path.join(base_dir, "data", "bomb")
+            for i in range(1, 7):
+                sprite = pygame.image.load(os.path.join(bomb_dir, f"bomb{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.bomba_sprites.append(sprite)
+            
+            # Cargar sprites de explosiones (10 frames)
+            explosion_dir = os.path.join(base_dir, "data", "explotions")
+            for i in range(1, 11):
+                sprite = pygame.image.load(os.path.join(explosion_dir, f"Explosion{i}.png"))
+                sprite = pygame.transform.scale(sprite, (self.CELL_SIZE, self.CELL_SIZE))
+                self.explosion_sprites.append(sprite)
+            
+            print("✓ Sprites de bombas y explosiones cargados correctamente")
+            
+        except (pygame.error, FileNotFoundError) as e:
+            print(f"⚠️ Error al cargar sprites de bombas/explosiones: {e}")
         
         # TODO: Agregar imagen para salida si la tienes
     
@@ -372,6 +410,44 @@ class ModoEscape:
                              (jugador_x + self.CELL_SIZE // 2, 
                               jugador_y + self.CELL_SIZE // 2),
                              self.CELL_SIZE // 3)
+        
+        # === DIBUJAR BOMBAS ===
+        for bomba in self.bombas:
+            if not bomba.explotada:
+                bomba_x = self.offset_x + bomba.columna * self.CELL_SIZE
+                bomba_y = self.offset_y + bomba.fila * self.CELL_SIZE
+                
+                # Animación de la bomba (6 frames, ciclar)
+                tiempo_desde_colocada = self.turnos - bomba.turno_colocada
+                frame_bomba = (tiempo_desde_colocada * 2) % len(self.bomba_sprites) if self.bomba_sprites else 0
+                
+                if self.bomba_sprites:
+                    self.screen.blit(self.bomba_sprites[frame_bomba], (bomba_x, bomba_y))
+                else:
+                    # Fallback: círculo negro con borde rojo
+                    pygame.draw.circle(self.screen, (0, 0, 0),
+                                     (bomba_x + self.CELL_SIZE // 2, 
+                                      bomba_y + self.CELL_SIZE // 2),
+                                     self.CELL_SIZE // 3)
+                    pygame.draw.circle(self.screen, (255, 0, 0),
+                                     (bomba_x + self.CELL_SIZE // 2, 
+                                      bomba_y + self.CELL_SIZE // 2),
+                                     self.CELL_SIZE // 3, 2)
+        
+        # === DIBUJAR EXPLOSIONES ===
+        for explosion in self.explosiones_activas:
+            fila, columna, frame, _ = explosion
+            exp_x = self.offset_x + columna * self.CELL_SIZE
+            exp_y = self.offset_y + fila * self.CELL_SIZE
+            
+            if self.explosion_sprites and frame < len(self.explosion_sprites):
+                self.screen.blit(self.explosion_sprites[frame], (exp_x, exp_y))
+            else:
+                # Fallback: círculo naranja brillante
+                pygame.draw.circle(self.screen, (255, 150, 0),
+                                 (exp_x + self.CELL_SIZE // 2, 
+                                  exp_y + self.CELL_SIZE // 2),
+                                 self.CELL_SIZE // 2)
     
     def dibujar_ui(self):
         """
@@ -406,9 +482,15 @@ class ModoEscape:
         self.screen.blit(mov_text, (self.WIDTH - 200, 45))
         
         # Instrucciones
-        inst_text = self.font_small.render("WASD: Mover | ESC: Salir", 
+        inst_text = self.font_small.render("WASD: Mover | ESPACIO: Bomba | ESC: Salir", 
                                           True, (150, 150, 150))
-        self.screen.blit(inst_text, (self.WIDTH - 250, 70))
+        self.screen.blit(inst_text, (self.WIDTH - 350, 70))
+        
+        # Mostrar bombas disponibles
+        bombas_activas = len([b for b in self.bombas if not b.explotada])
+        bombas_text = self.font_small.render(f"Bombas: {bombas_activas}/3", 
+                                            True, self.COLOR_TEXT)
+        self.screen.blit(bombas_text, (10, 95))
     
     def update(self, keys):
         """
@@ -514,6 +596,77 @@ class ModoEscape:
                 self.jugador_frame = 0
         else:
             self.jugador_frame = 0  # Frame quieto
+        
+        # Detectar tecla ESPACIO para colocar bomba (solo una vez al presionar)
+        if keys[pygame.K_SPACE] and not self.espacio_presionado:
+            self.espacio_presionado = True
+            se_coloco, self.ultimo_turno_bomba = colocar_bomba(
+                self.bombas,
+                self.jugador,
+                self.mapa,
+                self.turnos,
+                self.ultimo_turno_bomba
+            )
+        elif not keys[pygame.K_SPACE]:
+            self.espacio_presionado = False
+        
+        # Actualizar bombas y explosiones
+        self.actualizar_bombas()
+    
+    def actualizar_bombas(self):
+        """
+        Revisa todas las bombas activas:
+        - Si un enemigo pisa una bomba, explota inmediatamente
+        - Si llegaron al tiempo de explosión, las hace explotar
+        - Gestiona respawn de enemigos después de 10 turnos
+        - Actualiza animaciones de explosiones activas
+        """
+        # Guardar posiciones de bombas que van a explotar ANTES de procesarlas
+        bombas_a_explotar = []
+        for bomba in self.bombas:
+            if not bomba.explotada:
+                # Verificar si debe explotar por tiempo
+                if self.turnos - bomba.turno_colocada >= DEMORA_EXPLOSION_BOMBA:
+                    bombas_a_explotar.append((bomba.fila, bomba.columna))
+                # O si un enemigo está encima
+                else:
+                    for enemigo in self.enemigos:
+                        if enemigo.vivo and enemigo.fila == bomba.fila and enemigo.columna == bomba.columna:
+                            if (bomba.fila, bomba.columna) not in bombas_a_explotar:
+                                bombas_a_explotar.append((bomba.fila, bomba.columna))
+                            break
+        
+        # Usar la función completa de main.py que maneja todo
+        procesar_bombas_y_respawn(
+            self.bombas,
+            self.enemigos,
+            self.jugador,
+            self.mapa,
+            self.salida,
+            self.turnos,
+            self.enemigos_por_respawnear
+        )
+        
+        # Agregar explosiones visuales para las bombas que explotaron
+        for fila, columna in bombas_a_explotar:
+            ya_existe = any(exp[0] == fila and exp[1] == columna 
+                          for exp in self.explosiones_activas)
+            if not ya_existe:
+                self.explosiones_activas.append([fila, columna, 0, 0])
+        
+        # Actualizar animaciones de explosiones
+        explosiones_a_eliminar = []
+        for i, explosion in enumerate(self.explosiones_activas):
+            explosion[3] += 1  # Incrementar contador de frames
+            if explosion[3] >= 2:  # Cada 2 frames, avanzar animación (más rápido)
+                explosion[3] = 0
+                explosion[2] += 1  # Siguiente frame
+                if explosion[2] >= len(self.explosion_sprites):
+                    explosiones_a_eliminar.append(i)
+        
+        # Eliminar explosiones terminadas
+        for i in reversed(explosiones_a_eliminar):
+            self.explosiones_activas.pop(i)
     
     def manejar_eventos(self, evento):
         """

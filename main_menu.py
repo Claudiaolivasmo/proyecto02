@@ -443,9 +443,9 @@ class Game:
         label = FONT_MEDIUM.render("Selecciona dificultad:", True, COLORS['TEXT'])
         self.screen.blit(label, (WIDTH // 2 - label.get_width() // 2, 120))
 
-        self.draw_button(WIDTH // 2 - 150, 180, 300, 60, "⭐ Fácil")
-        self.draw_button(WIDTH // 2 - 150, 270, 300, 60, "⭐⭐ Medio")
-        self.draw_button(WIDTH // 2 - 150, 360, 300, 60, "⭐⭐⭐ Difícil")
+        self.draw_button(WIDTH // 2 - 150, 180, 300, 60, "I Fácil")
+        self.draw_button(WIDTH // 2 - 150, 270, 300, 60, "II Medio")
+        self.draw_button(WIDTH // 2 - 150, 360, 300, 60, "III Difícil")
         self.draw_button(WIDTH // 2 - 150, 450, 300, 60, "← Atrás")
 
     def draw_puntajes(self):

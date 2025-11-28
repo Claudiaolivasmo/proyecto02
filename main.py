@@ -1,15 +1,5 @@
-'''
-===================================
-Proyecto 2 - Introducción a la programación
-
-Mainor Martínez
-Claudia Olivas
-
-===================================
-'''
 import random
-import json
-import os
+
 
 
 
@@ -67,7 +57,7 @@ CONFIGS_DIFICULTAD = {
     DIFICULTAD_FACIL: ConfigDificultad(
         DIFICULTAD_FACIL,
         vel_enemigos=2,
-        cant_enemigos=2,
+        cant_enemigos=3,
         energia_max=120,
         consumo_correr=4,
         recuperacion_pasiva=3
@@ -75,7 +65,7 @@ CONFIGS_DIFICULTAD = {
     DIFICULTAD_MEDIA: ConfigDificultad(
         DIFICULTAD_MEDIA,
         vel_enemigos=1,
-        cant_enemigos=3,
+        cant_enemigos=5,
         energia_max=100,
         consumo_correr=5,
         recuperacion_pasiva=2
@@ -83,7 +73,7 @@ CONFIGS_DIFICULTAD = {
     DIFICULTAD_DIFICIL: ConfigDificultad(
         DIFICULTAD_DIFICIL,
         vel_enemigos=1,
-        cant_enemigos=4,
+        cant_enemigos=8,
         energia_max=80,
         consumo_correr=6,
         recuperacion_pasiva=1
@@ -573,8 +563,8 @@ def generar_mapa(ancho=ANCHO_MAPA, alto=ALTO_MAPA):
     # Probabilidades (ajusta al gusto)
     PROB_TUNEL_EN_CAMINO = 0.10   # 10% de caminos normales serán túneles
     PROB_LIANA_EN_CAMINO = 0.06   # 6% serán lianas
-    PROB_TUNEL_EN_MURO   = 0.04   # 4% de muros se abren como túnel
-    PROB_LIANA_EN_MURO   = 0.03   # 3% de muros se abren como liana
+    PROB_TUNEL_EN_MURO   = 0.08   # 8% de muros se abren como túnel
+    PROB_LIANA_EN_MURO   = 0.08   # 8% de muros se abren como liana
 
     # Para no romper el camino garantizado entrada→salida
     camino_principal_set = set(camino_principal)
@@ -689,13 +679,13 @@ def colocar_bomba(bombas, jugador, mapa, turnos, ultimo_turno_bomba):
     """
     # Límite de bombas
     if len([b for b in bombas if not b.explotada]) >= MAX_BOMBAS_ACTIVAS:
-        print(f"⚠️ Ya tienes {MAX_BOMBAS_ACTIVAS} bombas activas.")
+        print(f" Ya tienes {MAX_BOMBAS_ACTIVAS} bombas activas.")
         return False, ultimo_turno_bomba
 
     # Cooldown
     if turnos - ultimo_turno_bomba < COOLDOWN_BOMBA_TURNOS:
         faltan = COOLDOWN_BOMBA_TURNOS - (turnos - ultimo_turno_bomba)
-        print(f"⚠️ Debes esperar {faltan} turnos más para colocar otra bomba.")
+        print(f" Debes esperar {faltan} turnos más para colocar otra bomba.")
         return False, ultimo_turno_bomba
 
     f = jugador.fila
@@ -704,14 +694,14 @@ def colocar_bomba(bombas, jugador, mapa, turnos, ultimo_turno_bomba):
     # No permitir doble bomba en la misma casilla
     for b in bombas:
         if not b.explotada and b.fila == f and b.columna == c:
-            print("⚠️ Ya hay una bomba en esta casilla.")
+            print(" Ya hay una bomba en esta casilla.")
             return False, ultimo_turno_bomba
 
     # La casilla ya es válida porque el jugador está parado ahí,
     # así que simplemente creamos la bomba.
     nueva_bomba = Bomba(f, c, turnos)
     bombas.append(nueva_bomba)
-    print("💣 Has colocado una bomba.")
+    print(" Has colocado una bomba.")
     return True, turnos
 
 
@@ -724,7 +714,7 @@ def explotar_bomba(bomba, enemigos, jugador, mapa, salida,
     - Agenda respawn para más adelante.
     """
     bomba.explotada = True
-    print("💥 ¡Bomba explotó!")
+    print(" ¡Bomba explotó!")
 
     filas = len(mapa)
     columnas = len(mapa[0])
@@ -756,7 +746,7 @@ def explotar_bomba(bomba, enemigos, jugador, mapa, salida,
         if (enemigo.fila, enemigo.columna) in posiciones_afectadas:
             enemigo.vivo = False
             jugador.puntaje += BONO_BOMBA
-            print(f"👹 Enemigo eliminado por bomba. +{BONO_BOMBA} puntos.")
+            print(f" Enemigo eliminado por bomba. +{BONO_BOMBA} puntos.")
             enemigos_por_respawnear.append({
                 "enemigo": enemigo,
                 "turno_muerte": turnos
@@ -815,7 +805,7 @@ def procesar_bombas_y_respawn(bombas, enemigos, jugador, mapa, salida,
                 enemigo.fila = f
                 enemigo.columna = c
                 enemigo.vivo = True
-                print("👹 Un enemigo ha reaparecido en el mapa.")
+                print(" Un enemigo ha reaparecido en el mapa.")
                 break
         else:
             restantes.append(info)
@@ -853,244 +843,4 @@ def calcular_puntaje(movimientos, config_dificultad):
 
     return puntaje
 
-
-
-# ======= MODOS ============
-
-def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
-    config = CONFIGS_DIFICULTAD[clave_dificultad]
-    print("\n=== MODO ESCAPA ===")
-    print(f"Jugador: {nombre_jugador}")
-    print(f"Dificultad: {config.nombre}")
-
-    mapa, inicio, salida, camino_principal = generar_mapa()
-    fila_ini, col_ini = inicio
-
-    jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
-
-    # Crear enemigos iniciales SOLO en el camino principal
-    enemigos = crear_enemigos_en_camino(camino_principal, config.cant_enemigos, jugador, salida)
-
-
-    movimientos_jugador = 0  # cuenta de movimientos
-    turnos = 0 # para velocidad de enemigos
-
-    # Bombas y respawn de enemigos
-    bombas = []  # lista de objetos Bomba
-    enemigos_por_respawnear = []  # lista de dic
-    ultimo_turno_bomba = -COOLDOWN_BOMBA_TURNOS  # para poder poner una al inicio si quieres
-
-
-    os.system("cls")  # limpiar pantalla en Windows
-    mostrar_mapa_consola(mapa, jugador, salida, enemigos, bombas)
-    print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
-    print("\nUse comandos: w/a/s/d para moverse, b para bomba, x para salir.")
-
-
-    while True:
-        tecla = input("\nMovimiento: ").lower()
-
-        if tecla == "x":
-            print("Has salido del modo ESCAPA.")
-            break
-
-        se_movio = False
-
-        if tecla == "w":
-            se_movio = mover_jugador(jugador, "arriba", mapa, config)
-        elif tecla == "s":
-            se_movio = mover_jugador(jugador, "abajo", mapa, config)
-        elif tecla == "a":
-            se_movio = mover_jugador(jugador, "izquierda", mapa, config)
-        elif tecla == "d":
-            se_movio = mover_jugador(jugador, "derecha", mapa, config)
-        elif tecla == "b":
-            # Colocar bomba en la casilla actual
-            se_coloco, ultimo_turno_bomba = colocar_bomba(
-                bombas, jugador, mapa, turnos, ultimo_turno_bomba
-            )
-            # Poner bomba NO cuenta como movimiento para puntaje ni avance de turnos
-            # Si quisieras que sí cuente como "tiempo", podríamos incrementar turnos aquí.
-            continue
-        else:
-            print("Tecla no válida. Use w/a/s/d, b para bomba o x para salir.")
-            continue  # no se mueve ni coloca bomba
-
-        if not se_movio:
-            continue  # no hay turno si no se movió
-
-        movimientos_jugador += 1
-        turnos += 1
-
-
-        # ¿Llegó a la salida antes que lo atrapen?
-        if jugador.fila == salida[0] and jugador.columna == salida[1]:
-            os.system("cls")
-            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
-            print("\n🎉 ¡Has llegado a la salida del laberinto! 🎉")
-            puntaje = calcular_puntaje(movimientos_jugador, config)
-            print(f"\nTu puntaje: {puntaje}")
-            registro.registrar_partida(nombre_jugador, puntaje, MODO_ESCAPA)
-            break
-
-        # Mover enemigos según la "velocidad" de la dificultad
-        # En fácil (2) se mueven cada 2 turnos, en media/difícil (1) cada turno
-        if turnos % config.vel_enemigos == 0:
-            mover_enemigos(enemigos, jugador, mapa)
-
-        # Procesar bombas (explosión por tiempo o si las pisan) y respawn de enemigos
-        procesar_bombas_y_respawn(
-            bombas, enemigos, jugador, mapa, salida,
-            turnos, enemigos_por_respawnear
-        )
-
-
-        # ¿Algún enemigo lo atrapó?
-        if hay_colision_con_enemigo(jugador, enemigos):
-            os.system("cls")
-            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
-            print("\n💀 Un cazador te ha atrapado. Has perdido. 💀")
-            puntaje = 0  # puedes ajustar si quieres otra lógica
-            print(f"\nTu puntaje: {puntaje}")
-            registro.registrar_partida(nombre_jugador, puntaje, MODO_ESCAPA)
-            break
-
-        os.system("cls")
-        mostrar_mapa_consola(mapa, jugador, salida, enemigos, bombas)
-        print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
-        print(f"Movimientos: {movimientos_jugador}")
-        print(f"Bombas activas: {len(bombas)}")
-
-
-def iniciar_modo_cazador(nombre_jugador, clave_dificultad, registro):
-    config = CONFIGS_DIFICULTAD[clave_dificultad]
-    print("\n=== MODO CAZADOR ===")
-    print(f"Jugador: {nombre_jugador}")
-    print(f"Dificultad: {config.nombre}")
-
-    mapa, inicio, salida, camino_principal = generar_mapa()
-    fila_ini, col_ini = inicio
-    jugador = Jugador(nombre_jugador, fila_ini, col_ini, config)
-
-    # Cazadores iniciales SOLO en el camino principal
-    enemigos = crear_enemigos_en_camino(
-        camino_principal,
-        config.cant_enemigos,
-        jugador,
-        salida
-    )
-
-    movimientos_jugador = 0
-    turnos = 0
-    capturas = 0
-    escapes = 0
-
-    fila_salida, col_salida = salida
-
-    os.system("cls")
-    mostrar_mapa_consola(mapa, jugador, salida, enemigos)
-    print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
-    print(f"Cazadores atrapados: {capturas}/{OBJETIVO_CAPTURAS}")
-    print(f"Cazadores que escaparon: {escapes}")
-    print(f"Puntaje: {jugador.puntaje}")
-    # ⬅️ Instrucciones actualizadas
-    print("\nUse comandos: w/a/s/d para caminar, W/A/S/D para correr (más energía), x para salir.")
-
-    while True:
-        tecla = input("\nMovimiento: ").strip()
-
-        if tecla == "x":
-            print("Has salido del modo CAZADOR.")
-            break
-
-        se_movio = False
-        correr = tecla.isupper()  # Detecta si es mayúscula (correr)
-        tecla_lower = tecla.lower()
-
-        if tecla_lower == "w":
-            se_movio = mover_jugador(jugador, "arriba", mapa, config, correr=correr)
-        elif tecla_lower == "s":
-            se_movio = mover_jugador(jugador, "abajo", mapa, config, correr=correr)
-        elif tecla_lower == "a":
-            se_movio = mover_jugador(jugador, "izquierda", mapa, config, correr=correr)
-        elif tecla_lower == "d":
-            se_movio = mover_jugador(jugador, "derecha", mapa, config, correr=correr)
-        else:
-            print("Tecla no válida. Use w/a/s/d, W/A/S/D o x para salir.")
-            continue
-
-        # Si no se movió (muro / sin energía), no hay turno
-        if not se_movio:
-            continue
-        
-        movimientos_jugador += 1
-        turnos += 1
-
-        # =============== 1) CAPTURAR CAZADORES DESPUÉS DE MOVERSE (con respawn) ===============
-        capturados_ahora = capturar_enemigos_en_posicion_jugador(
-            jugador, enemigos, camino_principal, salida, respawn=True
-        )
-        if capturados_ahora > 0:
-            capturas += capturados_ahora
-            puntos_ganados = PUNTOS_ATRAPAR_ENEMIGO * capturados_ahora
-            jugador.puntaje += puntos_ganados
-            print(f"🎯 ¡Has atrapado {capturados_ahora} cazador(es)! +{puntos_ganados} puntos.")
-
-        # =============== 2) MOVER CAZADORES HACIA LA SALIDA ===============
-        if turnos % config.vel_enemigos == 0:
-            mover_enemigos_cazador(enemigos, mapa, salida)
-
-        # =============== 3) CAPTURAR SI ALGÚN CAZADOR SE MUEVE SOBRE TI (con respawn) ===============
-        capturados_por_movimiento = capturar_enemigos_en_posicion_jugador(
-            jugador, enemigos, camino_principal, salida, respawn=True
-        )
-        if capturados_por_movimiento > 0:
-            capturas += capturados_por_movimiento
-            puntos_ganados = PUNTOS_ATRAPAR_ENEMIGO * capturados_por_movimiento
-            jugador.puntaje += puntos_ganados
-            print(f"🎯 ¡Un cazador se movió hacia ti y lo atrapaste! +{puntos_ganados} puntos.")
-
-        # =============== 4) CAZADORES QUE ESCAPAN POR LA SALIDA (también respawnean) ===============
-        for enemigo in enemigos:
-            if enemigo.vivo and (enemigo.fila, enemigo.columna) == salida:
-                escapes += 1
-                jugador.puntaje -= PENALIZACION_ENEMIGO_ESCAPA
-                if jugador.puntaje < 0:
-                    jugador.puntaje = 0
-                print(f"🚪 Un cazador escapó por la salida. -{PENALIZACION_ENEMIGO_ESCAPA} puntos.")
-                # Lo mandamos a otra parte del camino
-                respawnear_enemigo(enemigo, camino_principal, jugador, salida)
-
-        # =============== 5) RECUPERAR ENERGÍA Y CHEQUEAR DERROTA ===============
-        recuperar_energia_jugador(jugador, config)
-
-        if jugador.esta_sin_energia():
-            os.system("cls")
-            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
-            print("\n💀 Te has quedado sin energía. Has perdido en modo CAZADOR. 💀")
-            puntaje_final = jugador.puntaje
-            print(f"\nTu puntaje final: {puntaje_final}")
-            registro.registrar_partida(nombre_jugador, puntaje_final, MODO_CAZADOR)
-            break
-
-        # =============== 6) CONDICIÓN DE VICTORIA ===============
-        if capturas >= OBJETIVO_CAPTURAS:
-            os.system("cls")
-            mostrar_mapa_consola(mapa, jugador, salida, enemigos)
-            print("\n🎉 ¡Has atrapado suficientes cazadores! 🎉")
-            print(f"Cazadores atrapados: {capturas}")
-            print(f"Cazadores que escaparon: {escapes}")
-            puntaje_final = jugador.puntaje
-            print(f"\nTu puntaje en modo CAZADOR: {puntaje_final}")
-            registro.registrar_partida(nombre_jugador, puntaje_final, MODO_CAZADOR)
-            break
-
-        # =============== 7) REDIBUJAR ESTADO ===============
-        os.system("cls")
-        mostrar_mapa_consola(mapa, jugador, salida, enemigos)
-        print(f"\nEnergía: {jugador.energia_actual}/{jugador.energia_max}")
-        print(f"Movimientos: {movimientos_jugador}")
-        print(f"Cazadores atrapados: {capturas}/{OBJETIVO_CAPTURAS}")
-        print(f"Cazadores que escaparon: {escapes}")
-        print(f"Puntaje: {jugador.puntaje}")
 

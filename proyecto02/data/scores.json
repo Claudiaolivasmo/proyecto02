@@ -10,17 +10,28 @@
         {
             "nombre": "Claudia",
             "mejor_escapa": 1365,
-            "mejor_cazador": 800,
+            "mejor_cazador": 850,
             "historial_escapa": [
                 176,
                 936,
                 550,
-                1365
+                1365,
+                352,
+                308
             ],
             "historial_cazador": [
                 750,
-                800
+                800,
+                850,
+                700
             ]
+        },
+        {
+            "nombre": "Clauida",
+            "mejor_escapa": 0,
+            "mejor_cazador": 0,
+            "historial_escapa": [],
+            "historial_cazador": []
         }
     ]
 }

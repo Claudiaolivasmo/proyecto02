@@ -10,7 +10,7 @@
         {
             "nombre": "Claudia",
             "mejor_escapa": 1365,
-            "mejor_cazador": 750,
+            "mejor_cazador": 800,
             "historial_escapa": [
                 176,
                 936,
@@ -18,7 +18,8 @@
                 1365
             ],
             "historial_cazador": [
-                750
+                750,
+                800
             ]
         }
     ]

@@ -11,7 +11,6 @@ import random
 import json
 import os
 
-RUTA_ARCHIVO_JUGADORES = "jugadores.json"
 
 
 # ====== CONSTANTES Y ESTRUCTURA BASE ======
@@ -51,8 +50,6 @@ BONO_BOMBA = 50                  # puntos por enemigo eliminado con bomba
 PENALIZACION_ENEMIGO_ESCAPA = 50   # puntos que pierdes si un cazador sale
 PUNTOS_ATRAPAR_ENEMIGO = 100       # puntos que ganas por atraparlo
 OBJETIVO_CAPTURAS = 8              # cazadores a atrapar para ganar
-
-
 
 
 class ConfigDificultad:
@@ -655,14 +652,12 @@ def mover_jugador(jugador, direccion, mapa, config_dificultad, correr=False):
         return False  # No puede entrar (muro, liana, etc.)
 
     # Consumo de energía
-    if correr:
+    if correr and jugador.energia_actual > 0:
+        # Solo si tiene energía, corre y gasta
         jugador.gastar_energia(config_dificultad.consumo_correr)
     else:
-        jugador.gastar_energia(1)  # caminar consume poco
-
-    if jugador.esta_sin_energia():
-        print("⚠️ El jugador no tiene energía suficiente para moverse.")
-        return False
+        # Caminar NO consume energía
+        pass
 
     # Si todo es válido → actualizar posición
     jugador.fila = nueva_fila
@@ -859,72 +854,8 @@ def calcular_puntaje(movimientos, config_dificultad):
     return puntaje
 
 
-def mostrar_mapa_consola(mapa, jugador, salida, enemigos, bombas=None):
-    """
-    Dibuja el mapa en consola:
-    - 🤠 jugador
-    - 👹 enemigos vivos
-    - 🚪 salida
-    - 💣 bombas sin explotar
-    - Terreno: MURO, CAMINO, LIANA, TUNEL
-    """
-    if bombas is None:
-        bombas = []
 
-    filas = len(mapa)
-    columnas = len(mapa[0])
-
-    for f in range(filas):
-        linea = ""
-        for c in range(columnas):
-
-            # 1) Jugador
-            if f == jugador.fila and c == jugador.columna:
-                linea += "🤠"
-                continue
-
-            # 2) Enemigos
-            hay_enemigo = False
-            for enemigo in enemigos:
-                if enemigo.vivo and enemigo.fila == f and enemigo.columna == c:
-                    linea += "👹"
-                    hay_enemigo = True
-                    break
-            if hay_enemigo:
-                continue
-
-            # 3) Salida
-            if (f, c) == salida:
-                linea += "🚪"
-                continue
-
-            # 4) Bombas
-            hay_bomba = False
-            for bomba in bombas:
-                if (not bomba.explotada) and bomba.fila == f and bomba.columna == c:
-                    linea += "💣"
-                    hay_bomba = True
-                    break
-            if hay_bomba:
-                continue
-
-            # 5) Terreno
-            celda = mapa[f][c]
-            if isinstance(celda, Camino):
-                linea += "  "       # 2 espacios para que coincida con "██"
-            elif isinstance(celda, Muro):
-                linea += "██"
-            elif isinstance(celda, Liana):
-                linea += "🌿"
-            elif isinstance(celda, Tunel):
-                linea += "░░"
-            else:
-                linea += "??"
-
-        print(linea)
-
-
-# ======= REGISTRO DE JUGADORES ============
+# ======= MODOS ============
 
 def iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro):
     config = CONFIGS_DIFICULTAD[clave_dificultad]
@@ -1163,261 +1094,3 @@ def iniciar_modo_cazador(nombre_jugador, clave_dificultad, registro):
         print(f"Cazadores que escaparon: {escapes}")
         print(f"Puntaje: {jugador.puntaje}")
 
-
-
-class RegistroJugadores:
-    """
-    Clase para guardar jugadores y sus puntajes.
-
-    Cada jugador tiene:
-    - partidas_jugadas
-    - mejor_puntaje_escapa
-    - mejor_puntaje_cazador
-    """
-
-    def __init__(self, ruta_archivo=RUTA_ARCHIVO_JUGADORES):
-        self.ruta = ruta_archivo
-        self.jugadores = {}   # Diccionario con todos los jugadores
-        self.cargar_desde_archivo()
-
-    # ---------------------------------------------------
-    # Cargar y guardar archivo
-    # ---------------------------------------------------
-    def cargar_desde_archivo(self):
-        if os.path.exists(self.ruta):
-            try:
-                with open(self.ruta, "r") as archivo:
-                    self.jugadores = json.load(archivo)
-            except:
-                self.jugadores = {}
-        else:
-            self.jugadores = {}
-
-    def guardar_en_archivo(self):
-        with open(self.ruta, "w") as archivo:
-            json.dump(self.jugadores, archivo, indent=2)
-
-    # ---------------------------------------------------
-    # Funciones de manejo de jugadores
-    # ---------------------------------------------------
-    def crear_jugador_si_no_existe(self, nombre):
-        """
-        Si el jugador NO existe en el diccionario, lo crea con valores iniciales.
-        Separamos los mejores puntajes por modo de juego.
-        """
-        if nombre not in self.jugadores:
-            self.jugadores[nombre] = {
-                "partidas_jugadas": 0,
-                "mejor_puntaje_escapa": 0,
-                "mejor_puntaje_cazador": 0
-            }
-            self.guardar_en_archivo()
-
-    def registrar_partida(self, nombre, puntaje, modo):
-        """
-        Actualiza las estadísticas del jugador:
-        - suma 1 partida jugada
-        - actualiza mejor puntaje si el nuevo es mayor
-        """
-        self.crear_jugador_si_no_existe(nombre)
-
-        jugador = self.jugadores[nombre]
-
-        # Asegurar que existan todas las llaves, por si el JSON es viejo
-        if "partidas_jugadas" not in jugador:
-            jugador["partidas_jugadas"] = 0
-        if "mejor_puntaje_escapa" not in jugador:
-            jugador["mejor_puntaje_escapa"] = 0
-        if "mejor_puntaje_cazador" not in jugador:
-            jugador["mejor_puntaje_cazador"] = 0
-
-        jugador["partidas_jugadas"] += 1
-
-        if modo == MODO_ESCAPA:
-            if puntaje > jugador["mejor_puntaje_escapa"]:
-                jugador["mejor_puntaje_escapa"] = puntaje
-        elif modo == MODO_CAZADOR:
-            if puntaje > jugador["mejor_puntaje_cazador"]:
-                jugador["mejor_puntaje_cazador"] = puntaje
-
-        self.guardar_en_archivo()
-
-    def obtener_datos_jugador(self, nombre):
-        """Devuelve el diccionario del jugador o None si no existe."""
-        return self.jugadores.get(nombre)
-
-    def obtener_todos_los_jugadores(self):
-        """Devuelve una lista con todos los nombres de jugadores registrados."""
-        return list(self.jugadores.keys())
-
-    def obtener_top5_por_modo(self, modo):
-        """
-        Devuelve una lista de tuplas (nombre, puntaje) ordenada de mayor a menor,
-        con máximo 5 jugadores, según el modo.
-        """
-        jugadores_puntajes = []
-
-        for nombre, datos in self.jugadores.items():
-            if modo == MODO_ESCAPA:
-                puntaje = datos.get("mejor_puntaje_escapa", 0)
-            elif modo == MODO_CAZADOR:
-                puntaje = datos.get("mejor_puntaje_cazador", 0)
-            else:
-                puntaje = 0
-
-            jugadores_puntajes.append((nombre, puntaje))
-
-        # Ordenar de mayor a menor puntaje
-        jugadores_puntajes.sort(key=lambda x: x[1], reverse=True)
-
-        # Devolver solo los primeros 5
-        return jugadores_puntajes[:5]
-
-
-# ============= MENÚS Y MAIN ===============
-
-
-def registrar_jugador(registro):
-
-    while True:
-        nombre = input("Ingrese su nombre de jugador: ").strip()
-        if nombre == "":
-            print("El nombre no puede estar vacío. Intente de nuevo.")
-        else:
-            registro.crear_jugador_si_no_existe(nombre)
-            print(f"\nBienvenido(a), {nombre}!\n")
-            return nombre
-
-
-def menu_dificultad(): # Selección de dificultad
-
-    print("\nSeleccione la dificultad:")
-    print("1. Fácil")
-    print("2. Media")
-    print("3. Difícil")
-
-    while True:
-        opcion = input("Opción: ").strip()
-        if opcion == "1":
-            return DIFICULTAD_FACIL
-        elif opcion == "2":
-            return DIFICULTAD_MEDIA
-        elif opcion == "3":
-            return DIFICULTAD_DIFICIL
-        else:
-            print("Opción inválida. Intente de nuevo.")
-
-
-def menu_modo(): # Selección de modo
-
-    print("\nSeleccione el modo de juego:")
-    print("1. Modo ESCAPA")
-    print("2. Modo CAZADOR")
-
-    while True:
-        opcion = input("Opción: ").strip()
-        if opcion == "1":
-            return MODO_ESCAPA
-        elif opcion == "2":
-            return MODO_CAZADOR
-        else:
-            print("Opción inválida. Intente de nuevo.")
-
-
-def mostrar_historial(registro): #     Muestra todos los jugadores y sus estadísticas básicas.
-
-    print("\n=== Historial de jugadores ===")
-    nombres = registro.obtener_todos_los_jugadores()
-
-    if len(nombres) == 0:
-        print("Aún no hay jugadores registrados.")
-        return
-
-    for nombre in nombres:
-        datos = registro.obtener_datos_jugador(nombre)
-        print(
-            f"- {nombre}: {datos['partidas_jugadas']} partidas, "
-            f"mejor ESCAPA = {datos['mejor_puntaje_escapa']}, "
-            f"mejor CAZADOR = {datos['mejor_puntaje_cazador']}"
-        )
-
-
-def mostrar_top5_escapa(registro):
-    print("\n=== TOP 5 - Modo ESCAPA ===")
-    top = registro.obtener_top5_por_modo(MODO_ESCAPA)
-
-    if len(top) == 0:
-        print("Aún no hay puntajes registrados en este modo.")
-        return
-
-    posicion = 1
-    for nombre, puntaje in top:
-        print(f"{posicion}. {nombre}: {puntaje} puntos")
-        posicion += 1
-
-
-def mostrar_top5_cazador(registro):
-    print("\n=== TOP 5 - Modo CAZADOR ===")
-    top = registro.obtener_top5_por_modo(MODO_CAZADOR)
-
-    if len(top) == 0:
-        print("Aún no hay puntajes registrados en este modo.")
-        return
-
-    posicion = 1
-    for nombre, puntaje in top:
-        print(f"{posicion}. {nombre}: {puntaje} puntos")
-        posicion += 1
-
-
-def main():
-    registro = RegistroJugadores()
-
-    print("===================================")
-    print(" Proyecto 2 - Introducción a la programación")
-    print(" Mainor Martínez & Claudia Olivas")
-    print("===================================\n")
-
-    # Registro obligatorio del jugador antes de jugar
-    nombre_jugador = registrar_jugador(registro)
-
-    while True:
-        print("============== MENÚ PRINCIPAL ==============")
-        print("1. Jugar")
-        print("2. Ver historial de jugadores")
-        print("3. Ver Top 5 ESCAPA")
-        print("4. Ver Top 5 CAZADOR")
-        print("5. Salir")
-
-        opcion = input("Seleccione una opción: ").strip()
-
-        if opcion == "1":
-            # Elegir dificultad y modo
-            clave_dificultad = menu_dificultad()
-            modo = menu_modo()
-
-            if modo == MODO_ESCAPA:
-                iniciar_modo_escapa(nombre_jugador, clave_dificultad, registro)
-            elif modo == MODO_CAZADOR:
-                iniciar_modo_cazador(nombre_jugador, clave_dificultad, registro)
-
-        elif opcion == "2":
-            mostrar_historial(registro)
-
-        elif opcion == "3":
-            mostrar_top5_escapa(registro)
-
-        elif opcion == "4":
-            mostrar_top5_cazador(registro)
-
-        elif opcion == "5":
-            print("\nGracias por jugar. ¡Hasta luego!\n")
-            break
-
-        else:
-            print("Opción inválida. Intente de nuevo.\n")
-
-
-
-if __name__ == "__main__":
-    main()

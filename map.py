@@ -28,7 +28,13 @@ from main import (
     Camino,  # Clases de terreno
     Liana,
     Tunel,
-    Muro
+    Muro,
+    mover_enemigos_cazador,
+    capturar_enemigos_en_posicion_jugador,
+    respawnear_enemigo,
+    PUNTOS_ATRAPAR_ENEMIGO,
+    PENALIZACION_ENEMIGO_ESCAPA,
+    OBJETIVO_CAPTURAS,
 )
 
 
@@ -645,14 +651,16 @@ class ModoEscape:
                             self.juego_terminado = True
                             return
                         
-                        # Recuperar energía después de moverse
-                        recuperar_energia_jugador(self.jugador, self.config)
-        
+        # Recuperar energía si el jugador está quieto
+        if not moviendo and self.jugador.energia_actual < self.jugador.energia_max:
+            recuperar_energia_jugador(self.jugador, self.config)
+
         # Animar sprite mientras se mueve
         if moviendo:
             self.jugador_frame += self.frame_speed
             if self.jugador_frame >= len(self.jugador_sprites[self.jugador_direccion]):
                 self.jugador_frame = 0
+        
         else:
             self.jugador_frame = 0  # Frame quieto
         
@@ -671,6 +679,8 @@ class ModoEscape:
         
         # Actualizar bombas y explosiones
         self.actualizar_bombas()
+    
+
     
     def actualizar_bombas(self):
         """
@@ -767,5 +777,305 @@ class ModoEscape:
         """
         Devuelve el puntaje final del jugador.
         Lo usa main_menu.py para guardarlo en el sistema de puntajes.
+        """
+        return self.puntaje_final
+
+
+class ModoCazador(ModoEscape):
+    """
+    Interfaz gráfica para el MODO CAZADOR.
+    Reusa casi todo de ModoEscape:
+    - mapa, sprites, dibujo
+    Pero cambia la lógica:
+    - El jugador atrapa enemigos pisándolos
+    - Los enemigos huyen hacia la salida
+    - Ganas al atrapar OBJETIVO_CAPTURAS
+    - Pierdes si te quedas sin energía
+    """
+
+    def __init__(self, screen, jugador_nombre, dificultad=DIFICULTAD_FACIL):
+        super().__init__(screen, jugador_nombre, dificultad)
+        
+        # Estadísticas específicas del modo cazador
+        self.capturas = 0
+        self.escapes = 0
+        
+        # En modo cazador no usamos bombas ni explosiones
+        self.bombas = []
+        self.explosiones_activas = []
+        self.enemigos_por_respawnear = []
+
+        # El puntaje aquí se va sumando con cada captura / escape
+        self.puntaje_final = 0
+
+    # =================== HUD / BARRA DE ENERGÍA ===================
+
+    def dibujar_ui(self):
+        """
+        HUD específico para modo cazador.
+        Incluye:
+        - Título y jugador
+        - Barra de energía (animada)
+        - Movimientos, capturas, escapes, puntaje
+        - Instrucciones
+        """
+        # ----- Título y jugador -----
+        titulo = self.font_medium.render(
+            f"Modo Cazador - {self.config.nombre.upper()}",
+            True,
+            self.COLOR_TEXT
+        )
+        self.screen.blit(titulo, (10, 10))
+
+        nombre_text = self.font_small.render(
+            f"Jugador: {self.jugador_nombre}",
+            True,
+            self.COLOR_TEXT
+        )
+        self.screen.blit(nombre_text, (10, 40))
+
+        # ----- Barra de energía (igual que en ModoEscape) -----
+        energia_label = self.font_small.render("Energía:", True, self.COLOR_TEXT)
+        self.screen.blit(energia_label, (10, 65))
+
+        # Animar suavemente hacia el valor real
+        if self.energia_visual < self.jugador.energia_actual:
+            self.energia_visual += self.velocidad_animacion_energia
+            if self.energia_visual > self.jugador.energia_actual:
+                self.energia_visual = self.jugador.energia_actual
+        elif self.energia_visual > self.jugador.energia_actual:
+            self.energia_visual -= self.velocidad_animacion_energia
+            if self.energia_visual < self.jugador.energia_actual:
+                self.energia_visual = self.jugador.energia_actual
+
+        barra_x = 90
+        barra_y = 67
+        barra_ancho = 200
+        barra_alto = 20
+
+        # Fondo barra
+        pygame.draw.rect(
+            self.screen,
+            (40, 40, 40),
+            (barra_x, barra_y, barra_ancho, barra_alto)
+        )
+
+        porcentaje_energia = self.energia_visual / self.jugador.energia_max
+        ancho_energia = int(barra_ancho * porcentaje_energia)
+
+        if porcentaje_energia > 0.6:
+            color_energia = (100, 255, 100)   # Verde
+        elif porcentaje_energia > 0.3:
+            color_energia = (255, 200, 0)     # Amarillo
+        else:
+            color_energia = (255, 100, 100)   # Rojo
+
+        if ancho_energia > 0:
+            pygame.draw.rect(
+                self.screen,
+                color_energia,
+                (barra_x, barra_y, ancho_energia, barra_alto)
+            )
+
+        # Borde
+        pygame.draw.rect(
+            self.screen,
+            (200, 200, 200),
+            (barra_x, barra_y, barra_ancho, barra_alto),
+            2
+        )
+
+        # Texto numérico de energía
+        energia_num = self.font_small.render(
+            f"{int(self.energia_visual)}/{int(self.jugador.energia_max)}",
+            True,
+            self.COLOR_TEXT
+        )
+        self.screen.blit(energia_num, (barra_x + barra_ancho + 10, 65))
+
+        # ----- Movimientos -----
+        mov_text = self.font_small.render(
+            f"Movimientos: {self.movimientos}",
+            True,
+            self.COLOR_TEXT
+        )
+        self.screen.blit(mov_text, (10, 95))
+
+        # ----- Capturas, escapes y puntaje -----
+        capturas_text = self.font_small.render(
+            f"Atrapados: {self.capturas}/{OBJETIVO_CAPTURAS}",
+            True,
+            self.COLOR_SUCCESS
+        )
+        self.screen.blit(capturas_text, (self.WIDTH - 260, 40))
+
+        escapes_text = self.font_small.render(
+            f"Escapados: {self.escapes}",
+            True,
+            (255, 180, 120)
+        )
+        self.screen.blit(escapes_text, (self.WIDTH - 260, 65))
+
+        puntaje_text = self.font_small.render(
+            f"Puntaje: {self.puntaje_final}",
+            True,
+            self.COLOR_TEXT
+        )
+        self.screen.blit(puntaje_text, (self.WIDTH - 260, 90))
+
+        # ----- Instrucciones -----
+        inst_text = self.font_small.render(
+            "WASD: mover | ESPACIO: correr | ESC: salir",
+            True,
+            (150, 150, 150)
+        )
+        self.screen.blit(inst_text, (self.WIDTH // 2 - 220, 70))
+
+    # =================== LÓGICA DE MODO CAZADOR ===================
+
+    def update(self, keys):
+        """
+        Actualiza el jugador cada frame (movimiento continuo) en MODO CAZADOR.
+        - ESPACIO: correr (más rápido y gasta energía)
+        - Caminar: no gasta energía
+        - Chocar con enemigos = atraparlos (no perder)
+        """
+        if self.juego_terminado:
+            return
+
+        # 1) Detectar si está corriendo
+        corriendo = keys[pygame.K_SPACE] and self.jugador.energia_actual > 0
+        velocidad = self.velocidad_jugador * (2 if corriendo else 1)
+
+        moviendo = False
+        nueva_fila = self.jugador.fila
+        nueva_columna = self.jugador.columna
+
+        # 2) Movimiento según teclas
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            self.pos_pixel_y -= velocidad
+            self.jugador_direccion = "up"
+            moviendo = True
+            nueva_fila = int((self.pos_pixel_y + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.pos_pixel_y += velocidad
+            self.jugador_direccion = "down"
+            moviendo = True
+            nueva_fila = int((self.pos_pixel_y + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            self.pos_pixel_x -= velocidad
+            self.jugador_direccion = "left"
+            moviendo = True
+            nueva_columna = int((self.pos_pixel_x + self.CELL_SIZE // 2) / self.CELL_SIZE)
+        elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.pos_pixel_x += velocidad
+            self.jugador_direccion = "right"
+            moviendo = True
+            nueva_columna = int((self.pos_pixel_x + self.CELL_SIZE // 2) / self.CELL_SIZE)
+
+        # 3) Validar límites y muros
+        if moviendo:
+            if 0 <= nueva_fila < ALTO_MAPA and 0 <= nueva_columna < ANCHO_MAPA:
+                casilla = self.mapa[nueva_fila][nueva_columna]
+
+                if not casilla.puede_pisar_jugador():
+                    # Retroceder si es muro/liana
+                    if keys[pygame.K_w] or keys[pygame.K_UP]:
+                        self.pos_pixel_y += velocidad
+                    elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
+                        self.pos_pixel_y -= velocidad
+                    elif keys[pygame.K_a] or keys[pygame.K_LEFT]:
+                        self.pos_pixel_x += velocidad
+                    elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+                        self.pos_pixel_x -= velocidad
+                else:
+                    # Cambió de celda
+                    if nueva_fila != self.jugador.fila or nueva_columna != self.jugador.columna:
+                        self.jugador.fila = nueva_fila
+                        self.jugador.columna = nueva_columna
+                        self.movimientos += 1
+                        self.turnos += 1
+
+                        # 4) Gastar energía SOLO si corre
+                        if corriendo:
+                            self.jugador.gastar_energia(self.config.consumo_correr)
+                            if self.jugador.energia_actual <= 0:
+                                self.puntaje_final = 0
+                                self.mensaje_final = "PERDISTE: Te quedaste sin energía"
+                                self.juego_terminado = True
+                                return
+
+                        # 5) Recuperar un poco de energía cada movimiento
+                        recuperar_energia_jugador(self.jugador, self.config)
+
+                        # 6) Mover enemigos hacia la salida (modo cazador)
+                        if self.turnos % self.config.vel_enemigos == 0:
+                            posiciones_anteriores = [(e.fila, e.columna) for e in self.enemigos]
+                            mover_enemigos_cazador(self.enemigos, self.mapa, self.salida)
+
+                            # Actualizar animaciones de enemigos
+                            for idx, enemigo in enumerate(self.enemigos):
+                                if enemigo.vivo:
+                                    fila_ant, col_ant = posiciones_anteriores[idx]
+                                    if enemigo.columna > col_ant:
+                                        self.enemigo_direcciones[idx] = 'right'
+                                    elif enemigo.columna < col_ant:
+                                        self.enemigo_direcciones[idx] = 'left'
+                                    elif enemigo.fila > fila_ant:
+                                        self.enemigo_direcciones[idx] = 'down'
+                                    elif enemigo.fila < fila_ant:
+                                        self.enemigo_direcciones[idx] = 'up'
+
+                                    if (enemigo.fila, enemigo.columna) != (fila_ant, col_ant):
+                                        self.enemigo_frames[idx] = (self.enemigo_frames.get(idx, 0) + 1) % 3
+
+                        # 7) Enemigos que llegan a la salida (escapan)
+                        for enemigo in self.enemigos:
+                            if enemigo.vivo and (enemigo.fila, enemigo.columna) == self.salida:
+                                self.escapes += 1
+                                self.puntaje_final -= PENALIZACION_ENEMIGO_ESCAPA
+                                enemigo.vivo = False
+
+                        # 8) Atrapar enemigos al pisarlos
+                        capturados = capturar_enemigos_en_posicion_jugador(
+                            self.jugador,
+                            self.enemigos,
+                            self.camino_principal,
+                            self.salida,
+                            respawn=True  # reaparecen en otra casilla del camino
+                        )
+
+                        if capturados > 0:
+                            self.capturas += capturados
+                            self.puntaje_final += capturados * PUNTOS_ATRAPAR_ENEMIGO
+
+                            # ¿Ganó?
+                            if self.capturas >= OBJETIVO_CAPTURAS:
+                                self.mensaje_final = "¡GANASTE! Has atrapado suficientes enemigos"
+                                self.juego_terminado = True
+                                return
+
+        # 9) Animación del sprite del jugador
+        if moviendo:
+            self.jugador_frame += self.frame_speed
+            if self.jugador_frame >= len(self.jugador_sprites[self.jugador_direccion]):
+                self.jugador_frame = 0
+        else:
+            self.jugador_frame = 0
+
+    # =================== EVENTOS Y RESULTADO ===================
+
+    def manejar_eventos(self, evento):
+        """
+        Solo manejamos ESC y cerrar ventana.
+        """
+        if evento.type == pygame.KEYDOWN:
+            if evento.key == pygame.K_ESCAPE:
+                return False
+        return True
+
+    def obtener_resultado(self):
+        """
+        El puntaje final es el acumulado en modo cazador.
         """
         return self.puntaje_final

@@ -1,7 +1,7 @@
 import pygame
 import os
 from data.data_manager import DataManager
-from map import ModoEscape
+from map import ModoEscape, ModoCazador
 from main import DIFICULTAD_FACIL, DIFICULTAD_MEDIA, DIFICULTAD_DIFICIL
 from ui.pantallas_finales import WinScreen, LoseScreen
 
@@ -125,24 +125,31 @@ class Game:
             btn_dificil = pygame.Rect(WIDTH // 2 - 150, 360, 300, 60)
             btn_atras = pygame.Rect(WIDTH // 2 - 150, 450, 300, 60)
 
+            # FÁCIL
             if btn_facil.collidepoint(mouse_pos):
                 if modo == "escape":
                     self.jugar_modo_escape(DIFICULTAD_FACIL)
-                else:
-                    self.play_game(modo, "facil")
+                elif modo == "cazador":
+                    self.jugar_modo_cazador(DIFICULTAD_FACIL)
                 self.current_screen = "menu_principal"
+
+            # MEDIO
             elif btn_medio.collidepoint(mouse_pos):
                 if modo == "escape":
                     self.jugar_modo_escape(DIFICULTAD_MEDIA)
-                else:
-                    self.play_game(modo, "medio")
+                elif modo == "cazador":
+                    self.jugar_modo_cazador(DIFICULTAD_MEDIA)
                 self.current_screen = "menu_principal"
+
+            # DIFÍCIL
             elif btn_dificil.collidepoint(mouse_pos):
                 if modo == "escape":
                     self.jugar_modo_escape(DIFICULTAD_DIFICIL)
-                else:
-                    self.play_game(modo, "dificil")
+                elif modo == "cazador":
+                    self.jugar_modo_cazador(DIFICULTAD_DIFICIL)
                 self.current_screen = "menu_principal"
+
+            # ATRÁS
             elif btn_atras.collidepoint(mouse_pos):
                 self.current_screen = "menu_principal"
 
@@ -150,6 +157,7 @@ class Game:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.current_screen = "menu_principal"
+
 
     def handle_puntajes_events(self, event, mouse_pos):
         """Eventos de la pantalla de puntajes"""
@@ -251,6 +259,46 @@ class Game:
             pygame.display.flip()
             self.clock.tick(60)
     
+    def jugar_modo_cazador(self, dificultad):
+        """Iniciar el modo cazador con el mapa real"""
+        modo_cazador = ModoCazador(self.screen, self.player_name, dificultad)
+        modo_cazador.cargar_imagenes()
+
+        jugando = True
+        while jugando:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    jugando = False
+                else:
+                    jugando = modo_cazador.manejar_eventos(event)
+
+            # Si el juego terminó, mostrar pantalla final y guardar puntaje
+            if modo_cazador.juego_terminado:
+                puntaje = modo_cazador.obtener_resultado()
+                # Guardar puntaje automáticamente en modo cazador
+                if puntaje > 0:
+                    self.data_manager.add_score(self.player_name, puntaje, "cazador")
+
+                # Mostrar pantalla de victoria o derrota
+                if "GANASTE" in modo_cazador.mensaje_final:
+                    win_screen = WinScreen()
+                    win_screen.show(message=f"{modo_cazador.mensaje_final}\nPuntaje: {puntaje} pts")
+                else:
+                    lose_screen = LoseScreen()
+                    lose_screen.show(message=modo_cazador.mensaje_final)
+
+                jugando = False
+
+            # Actualizar movimiento continuo
+            keys = pygame.key.get_pressed()
+            modo_cazador.update(keys)
+
+            modo_cazador.dibujar()
+            pygame.display.flip()
+            self.clock.tick(60)
+
+
     def play_game(self, modo, dificultad):
         """Simular la partida y pedir puntuación (para modo cazador)"""
         # Mostrar pantalla de juego (placeholder)

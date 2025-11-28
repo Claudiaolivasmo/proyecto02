@@ -143,6 +143,10 @@ class ModoEscape:
         self.explosiones_activas = []  # Lista de explosiones en pantalla: [(fila, col, frame, frame_counter)]
         self.espacio_presionado = False  # Para detectar solo una vez al presionar ESPACIO
         
+        # Sistema de animación de barra de energía
+        self.energia_visual = float(self.jugador.energia_actual)  # Energía que se muestra (animada)
+        self.velocidad_animacion_energia = 2.0  # Velocidad de animación de la barra
+        
     def cargar_imagenes(self):
         """
         Carga todas las imágenes del terreno desde la carpeta data/terreno.
@@ -468,13 +472,57 @@ class ModoEscape:
                                             True, self.COLOR_TEXT)
         self.screen.blit(nombre_text, (10, 45))
         
-        # Energía
-        energia_color = self.COLOR_SUCCESS if self.jugador.energia_actual > 30 else self.COLOR_DANGER
-        energia_text = self.font_small.render(
-            f"Energía: {self.jugador.energia_actual}/{self.jugador.energia_max}", 
-            True, energia_color
-        )
+        # Barra de energía con animación
+        energia_text = self.font_small.render("Energía:", True, self.COLOR_TEXT)
         self.screen.blit(energia_text, (10, 70))
+        
+        # Animar la barra de energía suavemente
+        if self.energia_visual < self.jugador.energia_actual:
+            self.energia_visual += self.velocidad_animacion_energia
+            if self.energia_visual > self.jugador.energia_actual:
+                self.energia_visual = self.jugador.energia_actual
+        elif self.energia_visual > self.jugador.energia_actual:
+            self.energia_visual -= self.velocidad_animacion_energia
+            if self.energia_visual < self.jugador.energia_actual:
+                self.energia_visual = self.jugador.energia_actual
+        
+        # Configuración de la barra
+        barra_x = 90
+        barra_y = 72
+        barra_ancho = 200
+        barra_alto = 20
+        
+        # Fondo de la barra (gris oscuro)
+        pygame.draw.rect(self.screen, (40, 40, 40), 
+                        (barra_x, barra_y, barra_ancho, barra_alto))
+        
+        # Calcular porcentaje y ancho de la barra
+        porcentaje_energia = self.energia_visual / self.jugador.energia_max
+        ancho_energia = int(barra_ancho * porcentaje_energia)
+        
+        # Color según porcentaje (gradiente)
+        if porcentaje_energia > 0.6:
+            color_energia = (100, 255, 100)  # Verde
+        elif porcentaje_energia > 0.3:
+            color_energia = (255, 200, 0)  # Amarillo/naranja
+        else:
+            color_energia = (255, 100, 100)  # Rojo
+        
+        # Dibujar barra de energía actual
+        if ancho_energia > 0:
+            pygame.draw.rect(self.screen, color_energia, 
+                            (barra_x, barra_y, ancho_energia, barra_alto))
+        
+        # Borde de la barra
+        pygame.draw.rect(self.screen, (200, 200, 200), 
+                        (barra_x, barra_y, barra_ancho, barra_alto), 2)
+        
+        # Texto con números
+        energia_num = self.font_small.render(
+            f"{int(self.energia_visual)}/{int(self.jugador.energia_max)}", 
+            True, self.COLOR_TEXT
+        )
+        self.screen.blit(energia_num, (barra_x + barra_ancho + 10, 70))
         
         # Movimientos
         mov_text = self.font_small.render(f"Movimientos: {self.movimientos}", 
@@ -533,8 +581,9 @@ class ModoEscape:
             if (0 <= nueva_fila < ALTO_MAPA and 0 <= nueva_columna < ANCHO_MAPA):
                 casilla = self.mapa[nueva_fila][nueva_columna]
                 
-                # Si chocó con muro, retroceder
-                if isinstance(casilla, Muro):
+                # Verificar si el jugador puede pisar esta casilla
+                if not casilla.puede_pisar_jugador():
+                    # No puede pasar (Muro o Liana), retroceder
                     if keys[pygame.K_w] or keys[pygame.K_UP]:
                         self.pos_pixel_y += self.velocidad_jugador
                     elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
@@ -550,6 +599,16 @@ class ModoEscape:
                         self.jugador.columna = nueva_columna
                         self.movimientos += 1
                         self.turnos += 1
+                        
+                        # Gastar energía al moverse
+                        self.jugador.gastar_energia(self.config.consumo_correr)
+                        
+                        # Verificar si se quedó sin energía
+                        if self.jugador.energia_actual <= 0:
+                            self.puntaje_final = 0
+                            self.mensaje_final = "PERDISTE: Te quedaste sin energía"
+                            self.juego_terminado = True
+                            return
                         
                         # Verificar victoria
                         if self.jugador.fila == self.salida[0] and self.jugador.columna == self.salida[1]:
@@ -586,7 +645,7 @@ class ModoEscape:
                             self.juego_terminado = True
                             return
                         
-                        # Recuperar energía
+                        # Recuperar energía después de moverse
                         recuperar_energia_jugador(self.jugador, self.config)
         
         # Animar sprite mientras se mueve
